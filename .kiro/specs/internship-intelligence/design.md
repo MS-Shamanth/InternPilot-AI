@@ -86,7 +86,7 @@ Decision: **score in the service, paginate in memory.** Scores depend on the liv
 
 ## 4. Data model
 
-All tables use integer surrogate PKs, `created_at`/`updated_at` as `DateTime(timezone=True)` in UTC (server default `now()`, `onupdate`). JSON columns use `sa.JSON().with_variant(JSONB, "postgresql")` so SQLite tests run unchanged (NFR2). Enum-like columns are `String` + `CheckConstraint` (portable, migration-friendly) rather than native PG enums.
+All tables use integer surrogate PKs, `created_at`/`updated_at` in UTC (server default `now()`, `onupdate`). Every timestamp column (`created_at`, `updated_at`, `discovered_at`, `interview_date`) uses the `UTCDateTime` `TypeDecorator` from `app/models/base.py` (impl `DateTime(timezone=True)`, `cache_ok=True`): on bind it raises `ValueError` for naive datetimes and converts aware values to UTC; on load it attaches `timezone.utc` when the driver returns a naive value (SQLite does not persist offsets). This keeps comparisons with the aware `clock.now()` valid on both databases (NFR2). Pure `date` columns use plain `Date`. JSON columns use `sa.JSON().with_variant(JSONB, "postgresql")` so SQLite tests run unchanged (NFR2). Enum-like columns are `String` + `CheckConstraint` (portable, migration-friendly) rather than native PG enums.
 
 ### 4.1 Tables
 
@@ -95,7 +95,8 @@ All tables use integer surrogate PKs, `created_at`/`updated_at` as `DateTime(tim
 |---|---|---|
 | id | int PK | |
 | name | varchar(100) not null | |
-| email | varchar(254) not null **unique** | stored lowercase |
+| email | varchar(254) not null **unique** | stored lowercase; editable by the user |
+| seed_key | varchar(32) null **unique** (`uq_users_seed_key`) | `'demo'` for the seeded demo user, null otherwise; stable identity for default-user resolution and seed idempotency (§12, §13.2) |
 | location | varchar(120) null | |
 | experience_level | varchar(16) null | check in `internship, entry, junior, mid, senior` |
 | education_level | varchar(16) null | check in `high_school, diploma, bachelor, master, phd` |
@@ -175,6 +176,8 @@ Constraint `UNIQUE(user_id, job_id)` (`uq_applications_user_job`). Index `ix_app
 | Job dedupe | `uq_jobs_source_external_id`, unique fingerprint; ingestion service decides update/skip | |
 | Score bounds/determinism | `matching.engine` | Single pure implementation (R3.12). |
 | Per-user scoping | Repositories take `user_id` explicitly on every per-user query | Prevents cross-user leakage by construction. |
+| Exactly one demo user | `uq_users_seed_key`; `SeedService` and `get_current_user` look up `seed_key='demo'` | Email is user-editable, so it cannot be the identity (R11.2, R13.2a). |
+| Timestamps are aware UTC | `UTCDateTime` type decorator (models) | One place covers every column on both databases (NFR2). |
 
 ### 4.3 Migrations
 
@@ -218,10 +221,12 @@ class MatchJob:
 
 `normalize_skill(raw)`:
 1. `unicodedata.normalize("NFKC", raw).casefold()`.
-2. Replace any whitespace run with a single space; strip.
-3. Strip leading/trailing characters in `` ,;:|/\()[]{}"'` `` and a trailing `.` (internal `.`, `+`, `#` are preserved: `node.js`, `c++`, `c#`, `.net`).
-4. Look up `ALIASES` (in `skill_catalog.py`); if present, replace with the canonical name.
-5. Return `None` if empty or longer than 50 characters (ignored, never an error).
+2. Replace any whitespace run with a single space.
+3. Repeat until the string no longer changes: strip whitespace; strip leading/trailing characters in `EDGE_PUNCTUATION = ` `` ,;:|/\()[]{}"'` ``; strip one trailing `.`. (Internal `.`, `+`, `#` are preserved: `node.js`, `c++`, `c#`; a leading `.` is preserved: `.net`.) So `" React ,"`, `"( React )"` and `"React."` all become `react`.
+4. Look up `ALIASES` (in `skill_catalog.py`); if present, replace with the canonical name. Every alias value is itself a canonical name that is a fixed point of steps 1–3 and not an alias key, so the function is idempotent: `normalize_skill(normalize_skill(x)) == normalize_skill(x)` whenever the inner result is not `None`.
+5. Return `None` if empty or longer than 50 characters. The engine and ingestion ignore `None` results; profile input rejects them with 422 (§8.1, R1.3).
+
+Tests: `test_normalize_skill_is_idempotent` (examples) plus a Hypothesis check in `tests/property/test_normalization_properties.py` that `normalize_skill(normalize_skill(x) or "") == normalize_skill(x)` for arbitrary text and for catalog/alias names wrapped in random edge punctuation and whitespace; a unit test asserts every `ALIASES` value is a fixed point.
 
 `ALIASES` (minimum set; extend only by adding entries): `reactjs, react.js → react`; `js, ecmascript → javascript`; `ts → typescript`; `py, python3 → python`; `postgres, psql → postgresql`; `node, nodejs → node.js`; `ml → machine learning`; `dl → deep learning`; `k8s → kubernetes`; `amazon web services → aws`; `google cloud, google cloud platform → gcp`; `sklearn, scikit learn → scikit-learn`; `natural language processing → nlp`; `golang → go`; `c sharp → c#`; `cpp → c++`; `vuejs, vue.js → vue`; `nextjs → next.js`; `tailwind, tailwindcss → tailwind css`; `rest, rest api, restful, restful apis → rest apis`; `html5 → html`; `css3 → css`; `mongo → mongodb`; `gh actions, github action → github actions`; `ci/cd, cicd → ci/cd`.
 
@@ -241,16 +246,20 @@ All ratios are `fractions.Fraction` values in [0, 1]; `points = weight × ratio`
 |---|---|---|---|---|
 | 1 | `required_skills` | Required skills | 35 | `R = ∅` → 1. Else `|R ∩ S| / |R|`. |
 | 2 | `preferred_skills` | Preferred skills | 10 | `P = ∅` → 1. Else `|P ∩ S| / |P|`. |
-| 3 | `role_similarity` | Role similarity | 15 | See role tokens below. No usable target roles or empty title tokens → 1/2. Else `max over target roles t of |tok(t) ∩ tok(title)| / |tok(t)|`. |
+| 3 | `role_similarity` | Role similarity | 15 | See role tokens below. `U = {t ∈ target_roles : tok(t) ≠ ∅}` (usable roles). `U = ∅` → 1/2 (neutral, no roles). Else `tok(title) = ∅` → 1/2 (neutral, no title terms). Else `max over t ∈ U of |tok(t) ∩ tok(title)| / |tok(t)|`. |
 | 4 | `experience` | Experience | 15 | Ordinal `internship 0, entry 1, junior 2, mid 3, senior 4`. Either side unknown → 1/2. `gap = job − user`: `gap ≤ 0` → 1; `1` → 3/5; `2` → 1/5; `≥ 3` → 0. |
 | 5 | `location` | Location | 10 | Job `remote` → 1. Candidates `C = preferred_locations ∪ {location}` (normalized, non-empty). `C = ∅` → 1/2. Any candidate's first segment = job's first segment → 1. Else any candidate's last segment = job's last segment → 1/2. Else 0. |
 | 6 | `work_mode` | Work mode | 5 | Preferred modes empty → 1/2. Job mode ∈ preferred → 1. Job `hybrid` (not preferred) → 1/2. Else 0. |
 | 7 | `education` | Education | 5 | Ordinal `high_school 0, diploma 1, bachelor 2, master 3, phd 4`. Job minimum null → 1. User unknown → 1/2. `user ≥ job` → 1; `user = job − 1` → 1/2; else 0. |
-| 8 | `projects` | Project relevance | 5 | `J = R ∪ P`. `J = ∅` → 1/2. `k` = number of distinct (casefolded name) projects with `normalize_skills(technologies) ∩ J ≠ ∅`: `k = 0` → 0; `k = 1` → 3/5; `k ≥ 2` → 1. |
+| 8 | `projects` | Project relevance | 5 | `J = R ∪ P`. `J = ∅` → 1/2. Projects are grouped by `casefold(strip(name))` (project groups, below). `k` = number of groups whose shared skills `⋃ normalize_skills(member.technologies) ∩ J ≠ ∅`: `k = 0` → 0; `k = 1` → 3/5; `k ≥ 2` → 1. |
 
 Weights sum to 100. Only factors 1–2 depend on `S`, and both are non-decreasing in `S ∩ (R ∪ P)` and unaffected by skills outside `R ∪ P`; this is what makes P2 hold. Projects use project technologies, not `S`, so adding a technical skill never changes factor 8.
 
-Role tokens `tok(s)`: casefold; replace `front-end|front end → frontend`, `back-end|back end → backend`, `full-stack|full stack → fullstack`; replace every character not in `[a-z0-9+#]` with a space; split; map `developer, dev, programmer → engineer`, `swe, sde → software, engineer` (expands to two tokens); drop stop tokens `intern, internship, trainee, junior, jr, senior, sr, lead, principal, staff, graduate, grad, new, entry, level, associate, i, ii, iii, the, and, of, for, a, an, to, in, at, with, remote, hybrid, onsite, m, f, d, w` and pure-digit tokens; result is a set. The "best role" for the reason text is the role with the highest ratio, ties broken by the lexicographically smallest casefolded role string (order-independent).
+Role tokens `tok(s)`: casefold; replace `front-end|front end → frontend`, `back-end|back end → backend`, `full-stack|full stack → fullstack`; replace every character not in `[a-z0-9+#]` with a space; split; map `developer, dev, programmer → engineer`, `swe, sde → software, engineer` (expands to two tokens); drop stop tokens `intern, internship, trainee, junior, jr, senior, sr, lead, principal, staff, graduate, grad, new, entry, level, associate, i, ii, iii, the, and, of, for, a, an, to, in, at, with, remote, hybrid, onsite, m, f, d, w` and pure-digit tokens; result is a set. The "best role" for the reason and `detail` text is chosen from `U` among roles with the highest ratio: smallest `casefold(role)`, then smallest original string (Python `str` ordering). This is a total order on strings, so the choice is independent of input order (P5).
+
+Project groups: group `profile.projects` by key `casefold(strip(name))`; skip projects whose stripped name is empty. A group's shared skills are the union over its members of `normalize_skills(technologies) ∩ J`; the group is relevant iff that union is non-empty; its display name is the lexicographically smallest original (stripped) `name` among members. Groups are ordered by key. This makes relevance, the shared skill and the displayed name independent of project order and of duplicates that differ only in case (P5).
+
+Serialization: the engine keeps `points` and `ratio` as exact `Fraction`s, so R4.2 holds exactly inside the engine; JSON serializes `points` rounded to 2 decimals and `ratio` to 4, so in JSON `|points − weight × ratio| ≤ 0.01`.
 
 Location segments: casefold, collapse whitespace, split on `,`, strip each segment, drop empty segments.
 
@@ -268,13 +277,14 @@ Every factor emits reasons into `positive_reasons` or `negative_reasons`. Skills
 | role | ratio = 1 | + | `Job title matches your target role "{role}"` |
 | role | 0 < ratio < 1 | + if ≥ 1/2 else − | `Job title partially matches your target role "{role}"` |
 | role | ratio = 0 | − | `Job title does not match your target roles` |
-| role | neutral | − | `Add target roles to your profile to improve role matching` |
+| role | neutral, `U = ∅` | − | `Add target roles to your profile to improve role matching` |
+| role | neutral, `tok(title) = ∅` | − | `Job title has no comparable role terms` |
 | experience | ratio = 1 | + | `Your {user} experience meets the {job} level` |
 | experience | 0 < ratio < 1 | − | `Role expects {job} level; your profile is {user}` |
 | experience | ratio = 0 | − | `Role expects {job} level, well above your {user} level` |
 | experience | neutral | − | `Experience level not specified` (profile or job missing) |
 | location | remote | + | `Remote role, location-independent` |
-| location | ratio = 1 | + | `{Job location} is one of your preferred locations` |
+| location | ratio = 1 | + | `{Job location} matches your location or preferred locations` |
 | location | ratio = 1/2 (country) | + | `{Job location} is in a country you prefer` |
 | location | ratio = 0 | − | `{Job location} is outside your preferred locations` |
 | location | neutral | − | `Add a location or preferred locations to your profile` |
@@ -287,7 +297,7 @@ Every factor emits reasons into `positive_reasons` or `negative_reasons`. Skills
 | education | ratio = 1/2 | − | `Role prefers {job}; you are one level below` |
 | education | ratio = 0 | − | `Role requires {job} education` |
 | education | neutral | − | `Education level not specified in your profile` |
-| projects | k ≥ 1 | + | `Project "{name}" uses {Skill}` (first relevant project by casefolded name, first shared skill alphabetically); if k ≥ 2 append ` (+{k−1} more relevant projects)` |
+| projects | k ≥ 1 | + | `Project "{name}" uses {Skill}` (`{name}` = display name of the first relevant project group by key; `{Skill}` = its alphabetically first shared skill by normalized name); if k ≥ 2 append ` (+{k−1} more relevant projects)` |
 | projects | k = 0 | − | `No projects demonstrate this role's skills` |
 | projects | J = ∅ | − | `Role lists no skills to compare projects against` |
 
@@ -313,11 +323,11 @@ Level labels use human text (`full_time` is not used here; levels render as `int
 }
 ```
 
-`factors` always has all eight entries in §5.3 order. `detail` templates: skills `"{m} of {n} required|preferred skills matched"` (or `"none listed"`), role `"best match: {role}"`/`"no target roles"`, others a short human summary. Skill lists hold display names sorted by normalized name.
+`factors` always has all eight entries in §5.3 order. `detail` templates: skills `"{m} of {n} required|preferred skills matched"` (or `"none listed"`), role `"best match: {role}"`/`"no target roles"`/`"no comparable title terms"`, others a short human summary. Skill lists hold display names sorted by normalized name.
 
 ### 5.6 Edge cases
 
-Empty profile → all neutral/zero factors; score is still in range. Job with no skills → required/preferred full credit, projects neutral. Skills that normalize to `None` are ignored. Duplicate projects by name count once. Unicode/full-width input is NFKC-normalized. `algorithm_version` is bumped on any rule change, and the Power's `scoring-rules.md` must be updated in the same commit.
+Empty profile → all neutral/zero factors; score is still in range. Job with no skills → required/preferred full credit, projects neutral. Skills that normalize to `None` are ignored by the engine. Projects whose names collide after casefold form one group (§5.3), so they count once and the reason text does not depend on their order. Target roles made only of stop tokens (`"Intern"`, `"Senior"`) are not usable and never cause a division by zero. Unicode/full-width input is NFKC-normalized. `algorithm_version` is bumped on any rule change, and the Power's `scoring-rules.md` must be updated in the same commit.
 
 ## 6. Application tracker (R5, R2.10–2.11)
 
@@ -327,7 +337,7 @@ Empty profile → all neutral/zero factors; score is still in range. Job with no
 class ApplicationStatus(StrEnum): SAVED="Saved"; INTERESTED="Interested"; APPLIED="Applied"; ASSESSMENT="Assessment"; INTERVIEW="Interview"; REJECTED="Rejected"; OFFER="Offer"; WITHDRAWN="Withdrawn"
 ALLOWED_TRANSITIONS: Mapping[ApplicationStatus, frozenset[ApplicationStatus]]
 SUBMITTED_STATUSES = {Applied, Assessment, Interview, Offer, Rejected}
-def transition(current: ApplicationStatus, target: ApplicationStatus) -> ApplicationStatus  # raises InvalidStatusTransition
+def transition(current: ApplicationStatus, target: ApplicationStatus) -> ApplicationStatus  # raises InvalidStatusTransitionError
 ```
 
 | From | Allowed targets |
@@ -343,7 +353,7 @@ def transition(current: ApplicationStatus, target: ApplicationStatus) -> Applica
 
 `transition(x, x)` returns `x` (no-op, R5.4). Any status may be used on create (users log past applications). Side effect in `ApplicationService`: when the resulting status is in `SUBMITTED_STATUSES` and `applied_at` is null, set `applied_at = clock.today()` (R5.6). Each successful create/status change/update/delete writes an `activity_events` row in the same transaction (R5.12).
 
-`ApplicationService` methods: `create(user, ApplicationCreate)`, `list(user, status: list|None)`, `update(user, id, ApplicationUpdate)` (partial; status handled via `transition`), `delete(user, id)`, `mark_applied(user, job_id)` (R2.10/2.11: create with `Applied`, or transition from Saved/Interested; already `Applied` → return as is; other → `InvalidStatusTransition`), `meta()` (statuses in canonical order + transition map).
+`ApplicationService` methods: `create(user, ApplicationCreate)`, `list(user, status: list|None)`, `update(user, id, ApplicationUpdate)` (partial; status handled via `transition`), `delete(user, id)`, `mark_applied(user, job_id) -> MarkAppliedResult(application, created: bool)` (R2.10/2.11: no application → create with `Applied`, `created=True` → route returns 201; Saved/Interested → transition to `Applied`, `created=False` → 200; already `Applied` → returned unchanged, `created=False` → 200, no activity event; any other status → `InvalidStatusTransitionError` → 409). The route picks the status code from `created` only; it does not branch on domain state., `meta()` (statuses in canonical order + transition map).
 
 ## 7. Dashboard and recommendations (R6, R7)
 
@@ -374,18 +384,18 @@ All paths under `/api`; JSON only; the current user comes from `get_current_user
 
 | Method | Path | Request | Success | Errors |
 |---|---|---|---|---|
-| GET | `/health` | — | 200 `{status, database, version}` | 503 db unavailable |
+| GET | `/health` | — | 200 `{"status":"ok","database":"ok","version":"<app version>"}` | 503 `{"status":"degraded","database":"unavailable","version":"<app version>"}` (health body, not the error envelope; R12.2, R12.6) |
 | GET | `/profile` | — | 200 `Profile` | 401, 503 |
 | PUT | `/profile` | `ProfileUpdate` (full replace) | 200 `Profile` | 422, 409 `EMAIL_TAKEN` |
 | GET | `/jobs` | query `q, employment_type[], work_mode[], experience_level[], location, source, skills (comma list), min_score, bookmarked, include_hidden, sort, order, page, page_size` | 200 `Page[JobSummary]` | 422 |
-| GET | `/jobs/{id}` | — | 200 `JobDetail` (job + `match_explanation` + `state` + `application`) | 404 |
+| GET | `/jobs/{id}` | — | 200 `JobDetail` (§8.3: summary fields incl. flags + `match_explanation` + `application`) | 404 |
 | POST | `/jobs/{id}/match` | — | 200 `MatchExplanation` | 404 |
 | PUT / DELETE | `/jobs/{id}/bookmark` | — | 200 `JobState` | 404 |
 | PUT / DELETE | `/jobs/{id}/hide` | — | 200 `JobState` | 404 |
-| POST | `/jobs/{id}/apply` | — | 201 `Application` (200 if already Applied) | 404, 409 |
+| POST | `/jobs/{id}/apply` | — | 201 `Application` when created; 200 `Application` when an existing Saved/Interested application moves to Applied or it is already Applied | 404, 409 `INVALID_STATUS_TRANSITION` |
 | POST | `/jobs/ingest` | `IngestRequest` | 200 `IngestResult` | 422, 413, 502 |
 | GET | `/recommendations` | `limit` 1–20 (default 5) | 200 `list[Recommendation]` | 422 |
-| GET | `/applications` | `status[]` | 200 `list[Application]` (with `job` summary) | 422 |
+| GET | `/applications` | `status[]` | 200 `list[Application]` (with `job` summary; unpaginated by design, max 500 — see below) | 422 |
 | GET | `/applications/meta` | — | 200 `{statuses[], transitions{}}` | — |
 | POST | `/applications` | `ApplicationCreate` | 201 `Application` | 404 job, 409 `DUPLICATE_APPLICATION`, 422 |
 | PATCH | `/applications/{id}` | `ApplicationUpdate` | 200 `Application` | 404, 409 `INVALID_STATUS_TRANSITION`, 422 |
@@ -395,6 +405,8 @@ All paths under `/api`; JSON only; the current user comes from `get_current_user
 | GET | `/interview/{job_id}` | — | 200 `InterviewPrep` | 404 |
 
 `JobSummary`: `id, title, company, location, employment_type, work_mode, experience_level, salary_min, salary_max, salary_currency, salary_period, deadline, source, discovered_at, required_skills[], preferred_skills[], match_score, is_bookmarked, is_hidden, application_status`. `JobDetail` adds `description, application_url, min_education_level, match_explanation, application`.
+
+Pagination exception: `GET /applications` returns a plain list because the Kanban board needs the user's full set in one response to place cards in columns. The set is per user and bounded: `ApplicationRepository.list_for_user` applies `LIMIT 500` ordered by `updated_at` desc, id desc, and the service logs WARNING when the cap is reached. This is the only unpaginated growing list; `coding-standards.md` records the exception.
 
 Sort semantics: `match_score` (default desc), `discovered_at` (default desc), `deadline` (default asc), `title`/`company` (default asc, casefold), `salary` (uses `salary_max ?? salary_min`, default desc); nulls last; tie-break id asc (R2.5).
 
@@ -409,7 +421,7 @@ Sort semantics: `match_score` (default desc), `discovered_at` (default desc), `d
 | `preferred_work_modes` | list of `WorkMode`, unique | 422 |
 | `experience_level`, `education_level` | optional enum | 422 |
 | `education` | ≤ 10 entries; `institution` 1–150, `degree` ≤ 100, `field` ≤ 100, years 1950–2100, `start_year ≤ end_year` | 422 |
-| `technical_skills` | ≤ 100 items, each 1–50 chars; stored once per normalized name | 422 |
+| `technical_skills` | ≤ 100 items, each 1–50 chars; each must satisfy `normalize_skill(item) is not None` (a field validator; e.g. `"(,)"` fails); stored once per normalized name | 422 (`loc` points at the offending index) |
 | `soft_skills` | ≤ 50 items, 1–50 chars | 422 |
 | `projects` | ≤ 20; `name` 1–120, `description` ≤ 2,000, `technologies` ≤ 20 × 1–50 chars, `url` optional http(s) | 422 |
 | `certifications` | ≤ 30; `name` 1–120, `issuer` ≤ 120, `year` 1950–2100 | 422 |
@@ -419,7 +431,7 @@ Sort semantics: `match_score` (default desc), `discovered_at` (default desc), `d
 | `ApplicationUpdate` | same fields, all optional; explicit `null` clears nullable fields | 422 |
 | Job list query | see R2.13; `skills` ≤ 10 entries | 422 |
 | `IngestRequest` | §11.1 | 422 / 413 |
-| `ResumeAnalyzeRequest` | `job_id` int ≥ 1 required; `resume_text` optional ≤ 50,000 | 422 |
+| `ResumeAnalyzeRequest` | `job_id` int ≥ 1 required; `resume_text` optional ≤ 50,000. The service treats `None`, empty and whitespace-only text the same: fall back to the profile text; if that is also empty/whitespace-only → `ResumeEmptyError` | 422 / 422 `RESUME_EMPTY` |
 | Path ids | int ≥ 1 | 422 |
 | Request body size | ≤ 5 MB (Content-Length and streamed byte count) via `BodySizeLimitMiddleware` | 413 `PAYLOAD_TOO_LARGE` |
 
@@ -431,20 +443,48 @@ Sort semantics: `match_score` (default desc), `discovered_at` (default desc), `d
 
 Validation errors: `details` is a list of `{loc, msg, type}` (Pydantic's `input` and `ctx` are stripped so user input is never echoed back).
 
+### 8.3 Response schemas
+
+Exact field lists; `frontend/src/types/api.ts` mirrors these names and types 1:1. Dates are `YYYY-MM-DD` strings, timestamps ISO-8601 UTC with `Z`. `?` marks nullable fields (always present, value may be `null`). Enums serialize as their string values.
+
+| Schema | Fields |
+|---|---|
+| `Page[T]` | `items: T[]`, `total: int`, `page: int`, `page_size: int`, `total_pages: int` |
+| `EducationEntry` | `institution: str`, `degree: str?`, `field: str?`, `start_year: int?`, `end_year: int?` |
+| `Project` | `name: str`, `description: str` (default `""`), `technologies: str[]`, `url: str?` |
+| `Certification` | `name: str`, `issuer: str?`, `year: int?` |
+| `Profile` | `id`, `name`, `email`, `location?`, `target_roles: str[]`, `preferred_locations: str[]`, `preferred_work_modes: WorkMode[]`, `experience_level: ExperienceLevel?`, `education_level: EducationLevel?`, `education: EducationEntry[]`, `technical_skills: str[]` (display names, sorted by normalized name), `soft_skills: str[]`, `projects: Project[]`, `certifications: Certification[]`, `resume_text: str`, `github_url?`, `portfolio_url?`, `linkedin_url?`, `created_at`, `updated_at`. `seed_key` is internal and never returned. |
+| `ProfileUpdate` (request) | every `Profile` field except `id`, `created_at`, `updated_at`; full replace |
+| `JobState` | `job_id: int`, `is_bookmarked: bool`, `is_hidden: bool` |
+| `JobSummary` | as listed under §8 above (`required_skills`/`preferred_skills` are display names sorted by normalized name; `match_score: int`; `application_status: ApplicationStatus?`) |
+| `JobDetail` | all `JobSummary` fields + `description: str`, `application_url: str`, `min_education_level: EducationLevel?`, `match_explanation: MatchExplanation`, `application: Application?` |
+| `MatchExplanation` | §5.5: `job_id`, `score`, `algorithm_version`, `factors: Factor[]` (`key`, `label`, `weight: int`, `points: float`, `ratio: float`, `detail: str`), `matched_required_skills`, `missing_required_skills`, `matched_preferred_skills`, `missing_preferred_skills`, `positive_reasons`, `negative_reasons` (all `str[]`) |
+| `ApplicationJob` | `id`, `title`, `company`, `location`, `deadline?` |
+| `Application` | `id`, `job_id`, `status: ApplicationStatus`, `applied_at?` (date), `deadline?` (date), `interview_date?` (timestamp), `recruiter_name?`, `recruiter_email?`, `notes: str`, `outcome?`, `created_at`, `updated_at`, `job: ApplicationJob` |
+| `ApplicationsMeta` | `statuses: ApplicationStatus[]` (canonical order), `transitions: {[status]: ApplicationStatus[]}` (targets in canonical order) |
+| `Recommendation` | `job: JobSummary`, `match_explanation: MatchExplanation` |
+| `Dashboard` | `total_jobs_discovered: int`, `matching_jobs: int`, `applications_submitted: int`, `interviews_scheduled: int`, `offers_received: int`, `response_rate: float`, `upcoming_deadlines: {job_id, application_id?, title, company, deadline, days_left: int, kind: "application"\|"bookmark"}[]`, `recent_activity: {id, type, message, job_id?, application_id?, created_at}[]`, `top_recommendations: {job_id, title, company, location, score: int}[]`, `status_breakdown: {status, count}[]`, `applications_over_time: {week_start: date, count}[]`, `score_distribution: {bucket: "0-19"\|"20-39"\|"40-59"\|"60-79"\|"80-100", count}[]` |
+| `ResumeAnalysis` | `job_id`, `resume_source: "request"\|"profile"`, `word_count: int`, `compatibility_score: int`, `matching_skills: {skill, is_required}[]`, `missing_skills: {skill, is_required, in_profile}[]`, `relevant_projects: {name, matched_skills: str[], mentioned_in_resume: bool}[]`, `missing_keywords: str[]`, `suggestions: {rule, message, evidence: str[]}[]`, `match_explanation: MatchExplanation` (skills are display names) |
+| `InterviewPrep` | §10: `job_id`, `provider: "template"\|"llm"`, `sections: {category, title, questions: {id, category, text, skill?}[]}[]`, `prep_topics: {topic, reason, priority: "high"\|"medium"\|"low"}[]` |
+| `IngestResult` | §11.5: `requested_source`, `source`, `fallback_used: bool`, `fetched`, `created`, `updated`, `duplicates`, `rejected` (ints), `errors: {index: int?, reason: str}[]` (≤ 50) |
+| `Health` | `status: "ok"\|"degraded"`, `database: "ok"\|"unavailable"`, `version: str` |
+
 ## 9. Resume analysis (R8)
 
 `ResumeService.analyze(user, job_id, resume_text | None)`.
 
 ### 9.1 Skill extraction
 
-Normalize the resume text (NFKC, casefold, whitespace collapse). For every catalog canonical name and every alias, search with the regex `(?<![a-z0-9+#.])` + `re.escape(term)` + `(?![a-z0-9+#])` (whole-word/phrase, so `java` does not match `javascript`, `c` patterns only for `c++`/`c#`). Matches map to canonical names. Catalog = `CATALOG` keys ∪ `skills.normalized_name` from the DB ∪ the job's skills, so job-specific skills are detectable.
+Produce two views of the resume text: `nfkc` (NFKC + whitespace collapse, case preserved) and `folded` (`nfkc.casefold()`). For every catalog canonical name and every alias (the "terms"), search with the regex `(?<![A-Za-z0-9+#.])` + `re.escape(term)` + `(?![A-Za-z0-9+#])` (whole-word/phrase, so `java` does not match `javascript`, `c` patterns only for `c++`/`c#`). Matches map to canonical names. Catalog = `CATALOG` keys ∪ `skills.normalized_name` from the DB ∪ the job's skills, so job-specific skills are detectable.
+
+Ambiguous short terms: `skill_catalog.AMBIGUOUS_RESUME_TERMS` maps each lowercase term that is also common English or a common abbreviation to the exact casings accepted: `go → {Go, Golang}`, `golang → {Golang}`, `rest → {REST}`, `node → {Node}`, `js → {JS}`, `ts → {TS}`, `py → {PY}`, `ml → {ML}`, `dl → {DL}`, `r → {R}`, `c → {C}`. These terms are searched case-sensitively in `nfkc` for each accepted casing (same boundary regex); every other term is searched in `folded`. Multi-word terms containing an ambiguous word (`rest apis`, `node.js`) are not ambiguous and use the folded rule. Unit tests: `"go to market"` → no `go`; `"Built services in Go"` → `go`; `"built REST APIs"` → `rest apis`; `"the rest of the team"` → nothing; `"R and Python"` → `r`, `python`.
 
 ### 9.2 Outputs
 
 - `matching_skills`: `(R ∪ P) ∩ resume_skills`, each `{skill, is_required}`.
 - `missing_skills`: `(R ∪ P) − resume_skills`, each `{skill, is_required, in_profile}` (`in_profile` = in normalized profile skills).
 - `relevant_projects`: profile projects whose technologies ∩ `R ∪ P` ≠ ∅, each `{name, matched_skills[], mentioned_in_resume}` (name appears in resume text, case-insensitive).
-- `missing_keywords`: tokens from the job description (casefold, `[a-z][a-z0-9+#.]{2,}`), excluding a fixed English stop-word list and tokens present in the resume; keep tokens with frequency ≥ 2 or that are catalog skills; sort by frequency desc then alphabetically; max 15.
+- `missing_keywords`: tokens from the job description (casefold, `[a-z][a-z0-9+#.]{2,}`, then trailing `.` characters stripped and tokens shorter than 3 characters dropped, so `"python."` → `python`), excluding a fixed English stop-word list and tokens present in the resume; keep tokens with frequency ≥ 2 or that are catalog skills; sort by frequency desc then alphabetically; max 15.
 - `compatibility_score` + `match_explanation`: `compute_match(profile with technical_skills = resume_skills, job)` (R8.4).
 - `word_count`, `resume_source` (`request` | `profile`).
 
@@ -475,14 +515,14 @@ class InterviewQuestionProvider(Protocol):
 | Section | Source | Limit |
 |---|---|---|
 | `role` | 6 role templates using `{title}`, `{company}`, `{employment_type}` | 5 (first 5) |
-| `technical` | per required skill (alphabetical), 2 templates each; then preferred | 10 |
-| `skill` | one "describe a time you used {Skill}" per required ∪ preferred skill, alphabetical | 8 |
+| `technical` | per required skill (alphabetical), 2 templates each; then preferred. If the job lists no skills: 3 generic templates using `{title}` (core concepts of the role, a recent technical problem solved, how you would ramp up in the first month) | 10 |
+| `skill` | one "describe a time you used {Skill}" per required ∪ preferred skill, alphabetical; omitted (empty section is not returned) when the job lists no skills | 8 |
 | `project` | per profile project sorted by casefolded name; template chosen by whether it uses job skills | 3 (fallback generic project question if no projects) |
 | `hr` | fixed list | 5 |
 
 Each question: `{id, category, text, skill?}` where `id = "{category}-{n}"`. `prep_topics`: missing required (`high`), matched required (`medium`), missing preferred (`low`), each `{topic, reason, priority}`, ordered by priority then name. Response: `{job_id, provider, sections[{category, title, questions[]}], prep_topics[]}`.
 
-`InterviewService` picks the provider at startup: `LlmEnrichedInterviewProvider` only when `LLM_ENABLED=true` and `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` are set (R15.1); otherwise template. The LLM provider first builds the template result, then calls the OpenAI-compatible `POST {LLM_BASE_URL}/chat/completions` (httpx, 15 s timeout, `Authorization: Bearer`), asking for up to 5 extra technical questions as a JSON array of strings; valid strings (≤ 300 chars, max 5) are appended to `technical` and `provider="llm"`. Any exception, non-2xx, timeout or parse failure → return the template result with `provider="template"` and log WARNING `llm_fallback reason=<type>` (R9.5, R15.3). The LLM is never used for scores or metrics (R15.2). Tests use `httpx.MockTransport`.
+`InterviewService` picks the provider at startup: `LlmEnrichedInterviewProvider` only when `LLM_ENABLED=true` and `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` are set (R15.1); otherwise template. The LLM provider first builds the template result, then calls the OpenAI-compatible `POST {LLM_BASE_URL}/chat/completions` (httpx, 15 s timeout, `Authorization: Bearer`), asking for up to 5 extra technical questions as a JSON array of strings; valid strings (non-empty after trim, ≤ 300 chars, max 5) are appended to `technical` with ids continuing the section's numbering (`technical-{n+1}` …, `skill=null`) and `provider="llm"`; if no valid strings come back the result is the template result with `provider="template"`. The `technical` limit of 10 applies to template questions only. Any exception, non-2xx, timeout or parse failure → return the template result with `provider="template"` and log WARNING `llm_fallback reason=<type>` (R9.5, R15.3). The LLM is never used for scores or metrics (R15.2). Tests use `httpx.MockTransport`.
 
 ## 11. Job ingestion (R10)
 
@@ -493,15 +533,23 @@ Each question: `{id, category, text, skill?}` where `id = "{category}-{n}"`. `pr
 ### 11.2 Sources (`sources.py`)
 
 ```python
+JsonObject = dict[str, object]
+
+@dataclass(frozen=True)
+class RawBatch:
+    format: RawFormat            # StrEnum: remotive | arbeitnow | normalized
+    source: str                  # value stored in jobs.source for these items
+    items: list[JsonObject]
+
 class JobSource(Protocol):
     name: str
-    def fetch(self, limit: int) -> RawBatch   # RawBatch(format, items: list[dict])
+    def fetch(self, limit: int) -> list[RawBatch]
 ```
 
 - `RemotiveSource`: `GET https://remotive.com/api/remote-jobs?limit={limit}`; items at `jobs`.
 - `ArbeitnowSource`: `GET https://www.arbeitnow.com/api/job-board-api`; items at `data`; truncated to `limit`.
 - `PayloadSource`: wraps the request payload (unwraps `jobs`/`data` keys if an object).
-- `FixtureSource`: reads `DATA_DIR/seed_jobs.json` and `DATA_DIR/ingest/*.json` (sorted filenames; files must be normalized format or carry a top-level `format`). No caller-supplied paths.
+- `FixtureSource`: reads `DATA_DIR/seed_jobs.json` and `DATA_DIR/ingest/*.json` (sorted filenames; files must be normalized format or carry a top-level `format`). No caller-supplied paths. It returns one batch per file: `seed_jobs.json` items keep `source="seed"` (so a fallback run updates the seeded rows by `(seed, external_id)` instead of creating duplicates); `ingest/*.json` items get `source="fixture"`. Remotive/Arbeitnow/Payload batches use `remotive`/`arbeitnow`/`payload`. A single `fetch` returns a one-element list for those sources.
 
 `HttpFetcher` (shared by public sources): rejects URLs whose scheme is not `https` or host not in `INGEST_ALLOWED_HOSTS` (exact match) before any request; `httpx.Client(timeout=INGEST_TIMEOUT_SECONDS, follow_redirects=False)`; streams the body and aborts above `INGEST_MAX_BYTES` (5,000,000); requires 2xx and a JSON body. Failures raise `SourceUnavailable(reason)` with reasons `disallowed_host | timeout | network_error | http_status_<code> | too_large | invalid_json | unexpected_shape`.
 
@@ -521,7 +569,7 @@ Each format has a normalizer `raw dict → JobCreate | Rejection(index, reason)`
 1. Existing job with same (source, external_id) → update mutable fields and skills; if the new fingerprint collides with a *different* job, skip the update and count `duplicates`. Else count `updated`.
 2. Else existing job with the same fingerprint → count `duplicates` (skip).
 3. Else insert → `created`. In-batch duplicates are caught by the same checks (fingerprints of earlier inserts are tracked in a set).
-One `jobs_ingested` activity event is written per run. All fetching and validation happen before the first write, so a source failure never causes partial writes (R10.7).
+Rule 2 applies regardless of source, matching R10.5 and the global `UNIQUE(dedupe_fingerprint)`: an item from the same source with a different `external_id` but the same normalized title/company/location is a duplicate (integration test `test_ingest_same_source_new_external_id_same_fingerprint_counts_duplicate`). One `jobs_ingested` activity event is written per run. All fetching and validation happen before the first write, so a source failure never causes partial writes (R10.7).
 
 ### 11.5 Fallback
 
@@ -531,7 +579,7 @@ One `jobs_ingested` activity event is written per run. All fetching and validati
 
 Files: `data/seed_profile.json` (one user + skills), `data/seed_jobs.json` (≥ 30 jobs, normalized format, `source` forced to `seed`, `external_id` like `seed-001`, `deadline_in_days` relative), `data/seed_applications.json` (≥ 10, keyed by `job_external_id`, with `status`, `applied_days_ago`, `deadline_in_days`, `interview_in_days`, recruiter placeholders such as `recruiter@example.com`, notes, outcome; ≥ 6 distinct statuses). `SeedService.run()`:
 1. Upsert catalog skills (`CATALOG` + all seed skills) by `normalized_name`.
-2. Create the demo user (`DEMO_USER_EMAIL`, `DEMO_USER_NAME`, profile from file) only if absent; never overwrite an existing user (R11.2).
+2. Look up the user with `seed_key = 'demo'`. If absent, create it with `seed_key='demo'`, `email=DEMO_USER_EMAIL`, `name=DEMO_USER_NAME` and the profile from the file; if `DEMO_USER_EMAIL` already belongs to a user without a seed key, fail with exit 1 and an ERROR log rather than creating a conflicting user. If present, never overwrite it, even if its email or profile was edited (R11.2).
 3. Ingest jobs through `IngestionService` with the normalized format (upsert by `seed`/`external_id`).
 4. Insert each seed application only if no application exists for (user, job); write `application_created` events.
 Exposed as `python -m app.cli seed` (exit 0 on success, 1 with a logged error on failure). Docker runs it after `alembic upgrade head` (R11.4).
@@ -561,11 +609,11 @@ Exposed as `python -m app.cli seed` (exit 0 on success, 1 with a logged error on
 
 ### 13.2 Current user
 
-`get_current_user(request, session)`: header `X-Demo-User` (email, ≤ 254) → that user or 401 `UNKNOWN_DEMO_USER`; no header → user with `DEMO_USER_EMAIL` or 503 `DEMO_USER_NOT_SEEDED`. The frontend sends no header by default. Documented as demo-only in README and `docs/api.md` (R13.5).
+`get_current_user(request, session)`: header `X-Demo-User` (email, ≤ 254, compared lowercase) → that user or 401 `UNKNOWN_DEMO_USER`; no header → user with `seed_key = 'demo'` or 503 `DEMO_USER_NOT_SEEDED`. `DEMO_USER_EMAIL` is only the initial email used by the seed, so editing the profile email does not break default resolution (R13.2a). API test: `PUT /profile` with a new email, then `GET /profile` without a header → 200 with the new email; re-running the seed afterwards leaves exactly one user. The frontend sends no header by default. Documented as demo-only in README and `docs/api.md` (R13.5).
 
 ## 14. Error handling and logging
 
-`app/core/errors.py`: `AppError(code, message, status_code, details)` with subclasses `NotFoundError(404)`, `ConflictError(409)` → `DuplicateApplicationError`, `InvalidStatusTransitionError`, `EmailTakenError`; `RequestValidationAppError(422)` → `ResumeEmptyError`; `PayloadTooLargeError(413)`; `UpstreamUnavailableError(502)`; `UnknownDemoUserError(401)`; `NotReadyError(503)`. Handlers registered in `create_app` map: `AppError` → its envelope; `RequestValidationError` → 422 `VALIDATION_ERROR`; `sqlalchemy.exc.IntegrityError` → 409 `CONFLICT` (WARNING); `sqlalchemy.exc.OperationalError` → 503 `DATABASE_UNAVAILABLE` (ERROR); any other `Exception` → 500 `INTERNAL_ERROR`, "An unexpected error occurred." (ERROR with traceback and request id, never in the response).
+`app/core/errors.py`: `AppError(code, message, status_code, details)` with subclasses `NotFoundError(404)`, `ConflictError(409)` → `DuplicateApplicationError`, `InvalidStatusTransitionError`, `EmailTakenError`; `RequestValidationAppError(422)` → `ResumeEmptyError`; `PayloadTooLargeError(413)`; `UpstreamUnavailableError(502)` → `IngestionSourceUnavailableError`; `UnknownDemoUserError(401)`; `NotReadyError(503)` → `DemoUserNotSeededError`, `DatabaseUnavailableError`; `InternalError(500)`. Starlette `HTTPException`s (unknown route, wrong method, unparsable body) map to the envelope with codes `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `BAD_REQUEST`, … and the standard status phrase as message (headers such as `Allow` kept). Handlers registered in `create_app` map: `AppError` → its envelope; `RequestValidationError` → 422 `VALIDATION_ERROR`; `sqlalchemy.exc.IntegrityError` → 409 `CONFLICT` (WARNING); `sqlalchemy.exc.OperationalError` → 503 `DATABASE_UNAVAILABLE` (ERROR); any other `Exception` → 500 `INTERNAL_ERROR`, "An unexpected error occurred." (ERROR with traceback and request id, never in the response).
 
 | Operation | Failure | Recoverable? | Caller receives | Log |
 |---|---|---|---|---|
@@ -583,7 +631,7 @@ Exposed as `python -m app.cli seed` (exit 0 on success, 1 with a logged error on
 | LLM enrichment | any failure | yes | template result | WARNING |
 | Seed CLI | file missing/invalid | fatal | exit 1 | ERROR |
 | Startup | `DATABASE_URL` missing | fatal | process exits | CRITICAL |
-| Health | DB check fails | yes | 503 `{status:"degraded", database:"unavailable"}` | WARNING |
+| Health | DB check fails | yes | 503 `{"status":"degraded","database":"unavailable","version":"<app version>"}` (health body, not the envelope) | WARNING |
 
 Logging: stdlib `logging`, format `%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s`; `RequestIdMiddleware` accepts a safe incoming `X-Request-ID` (`^[A-Za-z0-9-]{1,64}$`) or generates a UUID4, stores it in a context var and returns it (R12.5); one INFO access line per request (method, path, status, duration ms). Never log request bodies, resume text, emails of recruiters, or `LLM_API_KEY`.
 
@@ -632,7 +680,9 @@ Routes: `/` → redirect `/dashboard`; `/jobs`; `/jobs/:jobId`; `/applications?v
 | Property | `backend/tests/property/test_matching_properties.py`, `test_application_status_properties.py` | P1–P6 (§17) with a registered Hypothesis profile (`max_examples=200`, `derandomize=True`, `deadline=None`) |
 | Frontend | `frontend/tests/` | `MatchScoreRing`, `MatchExplanationPanel` (+/- prefixes), `KanbanBoard` (allowed moves only, Move-to menu by keyboard), `JobFilters` URL sync, `api/client` error parsing, Dashboard empty state |
 
-Dates are controlled with `FixedClock` injected via `get_clock` override. No test touches the network. Coverage gates: backend ≥ 80% lines, `app/services/matching` ≥ 95% (`pytest --cov`); frontend ≥ 60% lines for `src/components` and `src/lib`.
+Dates are controlled with `FixedClock` injected via `get_clock` override. No test touches the network.
+
+Test database bootstrap: `DATABASE_URL` is required at runtime, so `backend/tests/conftest.py` sets `os.environ["DATABASE_URL"]` at import time — before any `app` module is imported — to `TEST_DATABASE_URL` if set, else `sqlite+pysqlite://`. The SQLite engine uses `StaticPool` and `connect_args={"check_same_thread": False}` so the in-memory database is shared by the `TestClient` thread. A plain `pytest` therefore runs with no `.env`. Integration tests include a SQLite round-trip of an aware `interview_date` compared with `FixedClock.now()` (UTCDateTime, §4). Coverage gates: backend ≥ 80% lines, `app/services/matching` ≥ 95% (`pytest --cov`); frontend ≥ 60% lines for `src/components` and `src/lib`.
 
 ## 17. Correctness properties ↔ requirements
 
@@ -640,9 +690,9 @@ Dates are controlled with `FixedClock` injected via `get_clock` override. No tes
 |---|---|---|---|
 | P1 Score bounds | For arbitrary `MatchProfile`/`MatchJob` (random skill strings incl. catalog skills, aliases, unicode; random enums incl. None; 0–20 projects): `0 ≤ score ≤ 100`, `isinstance(score, int)`, each factor `0 ≤ points ≤ weight`, `score == floor(Σ points + 1/2)`, exactly 8 factors. | R3.1, R3.3, R3.4, R4.1, R4.2 | `test_p1_score_is_bounded` |
 | P2 Monotonicity | For any p, j and any `s ∈ j.required ∪ j.preferred`: `score(p + s) ≥ score(p)`. For any `s` with `normalize_skill(s) ∉ R ∪ P`: result unchanged. | R3.5, R3.6 | `test_p2_adding_matching_skill_never_lowers_score`, `test_p2_adding_unrelated_skill_changes_nothing` |
-| P3 Duplicates | For p and a variant whose skills are p's skills plus duplicates, case/whitespace variants and aliases: identical `MatchResult`. | R3.2, R3.7 | `test_p3_duplicate_skills_have_no_impact` |
+| P3 Duplicates | For p and a variant whose skills are p's skills plus duplicates, case/whitespace variants, edge-punctuation-wrapped variants (`" React ,"`, `"(React)"`, `"React."`) and aliases: identical `MatchResult`. | R3.2, R3.7 | `test_p3_duplicate_skills_have_no_impact` |
 | P4 Missing skills | For any p, j: every `r ∈ R − S` is in `missing_required_skills` and not in `matched_required_skills`; required points `= 35·|R∩S|/|R|`; if `S ∩ R = ∅ ≠ R` then required points = 0 (same for preferred). | R3.8, R3.9, R4.3 | `test_p4_missing_required_skills_get_no_credit` |
-| P5 Determinism | `compute_match(p, j) == compute_match(p, j)` and equals the result for p, j with all tuples permuted. | R3.10, R3.11, R4.6 | `test_p5_match_is_deterministic_and_order_independent` |
+| P5 Determinism | `compute_match(p, j) == compute_match(p, j)` and equals the result for p, j with all tuples permuted. Strategies deliberately include project names that collide after casefold with different technologies (`"Chat App"`/`"chat app"`) and target roles equal after casefold but different in original text (`"Backend Engineer"`/`"backend engineer"`), plus stop-token-only roles. | R3.10, R3.11, R4.6 | `test_p5_match_is_deterministic_and_order_independent` |
 | P6 Status validity | For any start status and any sequence of target strings (valid statuses and arbitrary text): after each step the status is exactly one member of `ApplicationStatus`; invalid targets raise and leave it unchanged; the Pydantic schema rejects non-members; a service-level stateful test (Hypothesis `RuleBasedStateMachine` over `ApplicationService` on SQLite) checks the stored row too. | R5.2, R5.4, R5.5 | `test_p6_application_always_has_one_valid_status` |
 
 Each test docstring cites its property and requirement IDs. `pytest backend/tests/property -v` runs them all.
@@ -650,9 +700,39 @@ Each test docstring cites its property and requirement IDs. `pytest backend/test
 ## 18. Docker and local run
 
 `docker-compose.yml`:
-- `db`: `postgres:16-alpine`, env from `POSTGRES_*`, named volume `pgdata`, healthcheck `pg_isready`.
-- `backend`: build `./backend` (`python:3.12-slim`, non-root user), `DATA_DIR=/data`, `./data:/data:ro`, `depends_on: db (service_healthy)`, entrypoint `docker-entrypoint.sh` → `alembic upgrade head`, `python -m app.cli seed`, `uvicorn app.main:app --host 0.0.0.0 --port 8000`; port 8000.
+- `db`: `postgres:16-alpine`, env from `POSTGRES_*`, named volume `pgdata`, healthcheck `pg_isready`, `ports: ["127.0.0.1:5432:5432"]` (loopback only, for host-run backends and `TEST_DATABASE_URL`; documented in README).
+- `backend`: build `./backend` (`python:3.12-slim`, non-root user), `environment.DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-internpilot}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-internpilot}` (overrides the localhost URL from `.env`, which is for host-run backends only; inside the container `localhost` is the container itself), `DATA_DIR=/data`, `./data:/data:ro`, `depends_on: db (service_healthy)`, entrypoint `docker-entrypoint.sh` → `alembic upgrade head`, `python -m app.cli seed`, `uvicorn app.main:app --host 0.0.0.0 --port 8000`; port 8000.
 - `frontend`: multi-stage (`node:22-alpine` build with `VITE_API_BASE_URL` build arg → `nginx:1.27-alpine`, SPA fallback in `nginx.conf`); port `5173:80`.
 Secrets come from `.env` (gitignored); compose uses `${VAR:-default}` placeholders that match `.env.example`.
 
 Local dev: `python -m venv .venv`, `pip install -r requirements-dev.txt`, `alembic upgrade head`, `python -m app.cli seed`, `uvicorn app.main:app --reload`; `npm ci`, `npm run dev`. Exact commands live in README.
+
+## 19. Spec review responses (docs/reviews/spec-review.md)
+
+All 23 findings were addressed; none were backlogged or rejected.
+
+| # | Severity | Response |
+|---|---|---|
+| 1 | HIGH | Added `users.seed_key` (§4.1, §4.2); seed and default-user resolution use `seed_key='demo'` (§12, §13.2); new R13.2a, R11.2 and R13.2 updated; API test specified in §13.2. |
+| 2 | MEDIUM | §5.1 step 3 now loops until stable; idempotence unit + Hypothesis checks; P3 strategy includes punctuation variants (§17). |
+| 3 | MEDIUM | Usable roles `U` defined, both neutral cases ratio 1/2, two separate reason templates (§5.3, §5.4). |
+| 4 | MEDIUM | Project groups by casefolded name with union of shared skills and smallest display name; total-order role tie-break; P5 strategies include collisions (§5.3, §5.4, §5.6, §17). |
+| 5 | MEDIUM | R10.5 reworded to "any existing job with a different (source, external_id)"; same-source integration test named in §11.4. |
+| 6 | MEDIUM | One health body everywhere (R12.2 exemption, R12.6, §8, §8.3, §14). |
+| 7 | MEDIUM | 201 only when created, 200 for transition/already Applied, 409 otherwise (R2.10, R2.11, §6 `MarkAppliedResult`, §8). |
+| 8 | MEDIUM | `AMBIGUOUS_RESUME_TERMS` matched case-sensitively in canonical casings (§9.1, R8.3); unit tests listed. |
+| 9 | MEDIUM | Compose sets the backend `DATABASE_URL` to the `db` host (§18); `.env.example` comments the localhost URL as host-only. |
+| 10 | MEDIUM | `UTCDateTime` type decorator for every timestamp column (§4, §4.2, NFR2); SQLite round-trip test (§16). |
+| 11 | MEDIUM | New §8.3 with exact response schemas. |
+| 12 | NIT | Exact on `Fraction`s; JSON within 0.01 (R4.2, §5.3). |
+| 13 | NIT | `seed_jobs.json` keeps `seed`, `ingest/*.json` uses `fixture` (§11.2). |
+| 14 | NIT | Location reason now "matches your location or preferred locations" (§5.4). |
+| 15 | NIT | `EMAIL_TAKEN`, `CONFLICT` added to coding-standards; `InvalidStatusTransitionError` used everywhere (§6). |
+| 16 | NIT | `GET /applications` exception documented with a 500 cap (§8, coding-standards). |
+| 17 | NIT | tasks.md: score display moved from 3.7 to 4.9; marker legend added. |
+| 18 | NIT | conftest sets `DATABASE_URL` before importing the app (§16). |
+| 19 | NIT | Generic technical fallback for jobs without skills; LLM ids continue `technical-{n}` (§10). |
+| 20 | NIT | Whitespace-only resume = empty (R8.7, §8.1); trailing `.` stripped from keywords (§9.2); skills normalizing to `None` → 422 (R1.3, §8.1). |
+| 21 | NIT | `JsonObject = dict[str, object]`, typed `RawBatch` (§11.2). |
+| 22 | NIT | `db` published on `127.0.0.1:5432` only (§18). |
+| 23 | NIT | `job_id` added to R4.1. |

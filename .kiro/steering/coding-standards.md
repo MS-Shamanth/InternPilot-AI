@@ -42,7 +42,8 @@ inclusion: always
 
 ## Error handling
 
-- Backend: one envelope `{"error": {"code", "message", "details"}}`; codes are `UPPER_SNAKE` (`NOT_FOUND`, `VALIDATION_ERROR`, `DUPLICATE_APPLICATION`, `INVALID_STATUS_TRANSITION`, `RESUME_EMPTY`, `INGESTION_SOURCE_UNAVAILABLE`, `PAYLOAD_TOO_LARGE`, `UNKNOWN_DEMO_USER`, `DEMO_USER_NOT_SEEDED`, `DATABASE_UNAVAILABLE`, `INTERNAL_ERROR`).
+- Backend: one envelope `{"error": {"code", "message", "details"}}`; codes are `UPPER_SNAKE` (`NOT_FOUND`, `VALIDATION_ERROR`, `DUPLICATE_APPLICATION`, `INVALID_STATUS_TRANSITION`, `RESUME_EMPTY`, `INGESTION_SOURCE_UNAVAILABLE`, `PAYLOAD_TOO_LARGE`, `UNKNOWN_DEMO_USER`, `DEMO_USER_NOT_SEEDED`, `EMAIL_TAKEN`, `CONFLICT`, `DATABASE_UNAVAILABLE`, `INTERNAL_ERROR`). Exception classes end in `Error` (`InvalidStatusTransitionError`, `EmailTakenError`).
+- `GET /api/health` is the one endpoint that does not use the envelope: it always returns `{status, database, version}` (200 or 503).
 - Frontend: `api/client.ts` converts non-2xx responses to `ApiError(code, message, status, details)`; UI shows `message` in a toast or inline field errors for 422.
 - Recoverable external failures degrade gracefully (fallback, template provider) and are logged at WARNING.
 
@@ -57,4 +58,4 @@ inclusion: always
 - `GET` read, `POST` create/compute, `PUT` full replace or idempotent set, `PATCH` partial update, `DELETE` remove/unset.
 - Status codes: 200 OK, 201 Created, 204 No Content, 401, 404, 409, 413, 422, 502, 503, 500.
 - JSON fields `snake_case`; dates `YYYY-MM-DD`; timestamps ISO-8601 UTC with `Z`.
-- Lists that can grow are paginated with `page`/`page_size` and return `{items, total, page, page_size, total_pages}`.
+- Lists that can grow are paginated with `page`/`page_size` and return `{items, total, page, page_size, total_pages}`. The single documented exception is `GET /api/applications`: the Kanban board needs the user's full set, so it returns a plain list capped at 500 per user (`design.md` §8).

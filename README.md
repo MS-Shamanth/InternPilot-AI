@@ -50,7 +50,9 @@ The full evidence table is in `docs/KIRO_CHALLENGE_EVIDENCE.md` (added in the fi
 
 ## Demo Account
 
-There is one seeded demo user, `demo@internpilot.dev` (set by `DEMO_USER_EMAIL`). Requests act as this user by default, or as the user named in the `X-Demo-User` header. **This is not production authentication.**
+There is one seeded demo user, initially `demo@internpilot.dev` (set by `DEMO_USER_EMAIL`). Requests act as this user by default (it is found by a stable seed key, so editing the profile email is safe), or as the user named in the `X-Demo-User` header. **This is not production authentication.** Do not expose it on a public network.
+
+Under docker compose, PostgreSQL is published on `127.0.0.1:5432` only (for a host-run backend or `TEST_DATABASE_URL`); the backend container reaches it as `db:5432`.
 
 ## Architecture
 
