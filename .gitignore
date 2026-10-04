@@ -37,3 +37,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Kiro workspace config (kept locally, not published)
+.kiro/

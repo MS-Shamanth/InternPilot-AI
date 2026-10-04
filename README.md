@@ -23,17 +23,6 @@ The project is built spec-first with Kiro. Behavior is defined in [`.kiro/specs/
 - **App:** _link added after deployment_
 - **API docs:** _link added after deployment_
 
-## Deploy
-
-The frontend is a static Vite build (Vercel); the FastAPI backend and PostgreSQL need a host that keeps a server running (Render free tier).
-
-1. **Backend + database (Render):** [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MS-Shamanth/InternPilot-AI)
-   The `render.yaml` blueprint creates the `internpilot-api` web service (Docker, runs migrations and the demo seed on start) and a PostgreSQL 16 database. When asked for `CORS_ORIGINS`, enter your Vercel URL (step 2), e.g. `https://internpilot-ai.vercel.app`.
-2. **Frontend (Vercel):** [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MS-Shamanth/InternPilot-AI&root-directory=frontend&env=VITE_API_BASE_URL&envDescription=Render%20backend%20URL%20plus%20%2Fapi)
-   Set `VITE_API_BASE_URL` to the Render URL plus `/api`, e.g. `https://internpilot-api.onrender.com/api`.
-3. If the Vercel URL is different from what you entered in step 1, update `CORS_ORIGINS` on Render.
-
-The free Render instance sleeps when idle, so the first request after a pause can take about a minute. The demo identity is not authentication (see Demo Account).
 ## Tech Stack
 
 - **Frontend:** React 18, TypeScript (strict), Vite, Tailwind CSS, React Router, TanStack Query, Recharts

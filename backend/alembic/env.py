@@ -15,6 +15,7 @@ from alembic import context
 from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
+from app.core.database import normalize_database_url
 from app.models import Base
 
 config = context.config
@@ -27,8 +28,9 @@ if config.config_file_name is not None and config.attributes.get("configure_logg
 def _database_url() -> str:
     override = context.get_x_argument(as_dictionary=True).get("db_url")
     if override:
-        return override
-    return get_settings().database_url.get_secret_value()
+        return normalize_database_url(override).render_as_string(hide_password=False)
+    url = get_settings().database_url.get_secret_value()
+    return normalize_database_url(url).render_as_string(hide_password=False)
 
 
 def _configure(connection: Connection) -> None:
