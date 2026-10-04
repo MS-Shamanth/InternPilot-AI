@@ -1,0 +1,21 @@
+# Only requirements.txt, app/, alembic/, alembic.ini and docker-entrypoint.sh are needed.
+.env
+.env.*
+*.env
+.venv/
+venv/
+__pycache__/
+*.py[co]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+*.db
+*.sqlite3
+tests/
+requirements-dev.txt
+Dockerfile
+.dockerignore

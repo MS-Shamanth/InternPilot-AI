@@ -1,0 +1,2281 @@
+{
+  "info": {
+    "_postman_id": "6f7c1e0a-2b1d-4c55-9a3e-7d1a0b6c9e01",
+    "name": "InternPilot AI API",
+    "description": "Every REST endpoint in .kiro/specs/internship-intelligence/design.md §8.\n\nSelect the 'InternPilot Local' environment (baseUrl, demoUser) and run the folders in order. 'List jobs' stores {{jobId}} (first job without an application); 'Create application' and 'Mark job applied' store {{applicationId}}. The run cleans up the application it creates.\n\nX-Demo-User selects the seeded demo identity. It is NOT authentication; do not expose this API on a public network.\n\nA collection-level test checks X-Request-ID on every response and the error envelope {error: {code, message, details}} on every non-health error.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "description": "GET /api/health. The only endpoint that does not use the error envelope (design.md §8).",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "200 {status: ok, database: ok, version} or 503 {status: degraded, database: unavailable, version}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 or 503', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+                  "const body = pm.response.json();",
+                  "pm.test('health body shape', () => {",
+                  "  pm.expect(body.status).to.be.oneOf(['ok', 'degraded']);",
+                  "  pm.expect(body.database).to.be.oneOf(['ok', 'unavailable']);",
+                  "  pm.expect(body.version).to.be.a('string');",
+                  "  pm.expect(body).to.not.have.property('error');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "description": "GET/PUT /api/profile for the demo user resolved from X-Demo-User (demo identity, not authentication).",
+      "item": [
+        {
+          "name": "Get profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            },
+            "description": "Returns the demo user's Profile. Stores it so 'Replace profile' can PUT it back unchanged."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('profile shape', () => {",
+                  "  pm.expect(body.email).to.be.a('string');",
+                  "  pm.expect(body.technical_skills).to.be.an('array');",
+                  "  pm.expect(body).to.not.have.property('seed_key');",
+                  "});",
+                  "const { id, created_at, updated_at, ...update } = body;",
+                  "pm.collectionVariables.set('profileBody', JSON.stringify(update));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            },
+            "description": "Full replace (ProfileUpdate). The body shown is an example; when 'Get profile' ran first, the pre-request script sends the current profile back unchanged so running the collection does not alter demo data.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Student\",\n  \"email\": \"demo@internpilot.dev\",\n  \"location\": \"Bengaluru, India\",\n  \"target_roles\": [\n    \"Frontend Engineer\",\n    \"Full Stack Developer\"\n  ],\n  \"preferred_locations\": [\n    \"Bengaluru, India\",\n    \"Remote\"\n  ],\n  \"preferred_work_modes\": [\n    \"remote\",\n    \"hybrid\"\n  ],\n  \"experience_level\": \"internship\",\n  \"education_level\": \"bachelor\",\n  \"education\": [\n    {\n      \"institution\": \"Example Institute of Technology\",\n      \"degree\": \"B.E.\",\n      \"field\": \"Computer Science\",\n      \"start_year\": 2023,\n      \"end_year\": 2027\n    }\n  ],\n  \"technical_skills\": [\n    \"React\",\n    \"TypeScript\",\n    \"Python\",\n    \"SQL\",\n    \"Git\"\n  ],\n  \"soft_skills\": [\n    \"Communication\",\n    \"Teamwork\"\n  ],\n  \"projects\": [\n    {\n      \"name\": \"Campus Event Hub\",\n      \"description\": \"Event discovery app for student clubs.\",\n      \"technologies\": [\n        \"React\",\n        \"Node.js\",\n        \"PostgreSQL\"\n      ],\n      \"url\": \"https://github.com/example/campus-event-hub\"\n    }\n  ],\n  \"certifications\": [\n    {\n      \"name\": \"Cloud Fundamentals\",\n      \"issuer\": \"Example Academy\",\n      \"year\": 2025\n    }\n  ],\n  \"resume_text\": \"Computer science student building React and Python projects.\",\n  \"github_url\": \"https://github.com/example\",\n  \"portfolio_url\": null,\n  \"linkedin_url\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const current = pm.collectionVariables.get('profileBody');",
+                  "if (current) { pm.request.body.raw = current; }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns profile', () => pm.expect(pm.response.json().email).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace profile - invalid body (422)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            },
+            "description": "Empty name, bad URL host and an unknown field: 422 VALIDATION_ERROR with details[{loc, msg, type}] and no echoed input.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\",\n  \"github_url\": \"https://example.com/not-github\",\n  \"unexpected_field\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));",
+                  "pm.test('details are loc/msg/type without input', () => {",
+                  "  const details = pm.response.json().error.details;",
+                  "  pm.expect(details).to.be.an('array').that.is.not.empty;",
+                  "  details.forEach((d) => {",
+                  "    pm.expect(d).to.have.keys('loc', 'msg', 'type');",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get profile - unknown demo user (401)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "unknown-user@example.com",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            },
+            "description": "An X-Demo-User email that does not exist returns 401 UNKNOWN_DEMO_USER."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error code is UNKNOWN_DEMO_USER', () => pm.expect(pm.response.json().error.code).to.eql('UNKNOWN_DEMO_USER'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "description": "Job discovery, match explanation, bookmark/hide and mark-applied (design.md §8).",
+      "item": [
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs?q=react&sort=match_score&order=desc&page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "react",
+                  "description": "Free-text search (title, company, description, skills)."
+                },
+                {
+                  "key": "employment_type",
+                  "value": "internship",
+                  "description": "Repeatable: full_time | part_time | contract | internship.",
+                  "disabled": true
+                },
+                {
+                  "key": "work_mode",
+                  "value": "remote",
+                  "description": "Repeatable: remote | hybrid | onsite.",
+                  "disabled": true
+                },
+                {
+                  "key": "experience_level",
+                  "value": "internship",
+                  "description": "Repeatable: internship | entry | junior | mid | senior.",
+                  "disabled": true
+                },
+                {
+                  "key": "location",
+                  "value": "Bengaluru",
+                  "description": "Location substring.",
+                  "disabled": true
+                },
+                {
+                  "key": "source",
+                  "value": "seed",
+                  "description": "seed | fixture | remotive | arbeitnow | payload.",
+                  "disabled": true
+                },
+                {
+                  "key": "skills",
+                  "value": "react,typescript",
+                  "description": "Comma list, up to 10 skills.",
+                  "disabled": true
+                },
+                {
+                  "key": "min_score",
+                  "value": "60",
+                  "description": "Minimum match score 0-100.",
+                  "disabled": true
+                },
+                {
+                  "key": "bookmarked",
+                  "value": "true",
+                  "description": "Only bookmarked jobs.",
+                  "disabled": true
+                },
+                {
+                  "key": "include_hidden",
+                  "value": "false",
+                  "description": "Include hidden jobs.",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "match_score",
+                  "description": "match_score | discovered_at | deadline | title | company | salary."
+                },
+                {
+                  "key": "order",
+                  "value": "desc",
+                  "description": "asc | desc."
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number, starting at 1."
+                },
+                {
+                  "key": "page_size",
+                  "value": "20",
+                  "description": "Items per page."
+                }
+              ]
+            },
+            "description": "Page[JobSummary] with match_score per job. Picks the first job without an application as {{jobId}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('page shape', () => {",
+                  "  pm.expect(body).to.include.keys('items', 'total', 'page', 'page_size', 'total_pages');",
+                  "  pm.expect(body.items).to.be.an('array');",
+                  "});",
+                  "pm.test('scores are integers 0-100', () => {",
+                  "  body.items.forEach((job) => {",
+                  "    pm.expect(Number.isInteger(job.match_score)).to.be.true;",
+                  "    pm.expect(job.match_score).to.be.within(0, 100);",
+                  "  });",
+                  "});",
+                  "const free = body.items.find((job) => job.application_status === null);",
+                  "if (free) { pm.collectionVariables.set('jobId', String(free.id)); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List jobs - all filters (example)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs?employment_type=internship&work_mode=remote&experience_level=internship&location=Bengaluru&source=seed&skills=react,typescript&min_score=60&bookmarked=true&include_hidden=false&sort=match_score&order=desc&page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "employment_type",
+                  "value": "internship",
+                  "description": "Repeatable: full_time | part_time | contract | internship.",
+                  "disabled": false
+                },
+                {
+                  "key": "work_mode",
+                  "value": "remote",
+                  "description": "Repeatable: remote | hybrid | onsite.",
+                  "disabled": false
+                },
+                {
+                  "key": "experience_level",
+                  "value": "internship",
+                  "description": "Repeatable: internship | entry | junior | mid | senior.",
+                  "disabled": false
+                },
+                {
+                  "key": "location",
+                  "value": "Bengaluru",
+                  "description": "Location substring.",
+                  "disabled": false
+                },
+                {
+                  "key": "source",
+                  "value": "seed",
+                  "description": "seed | fixture | remotive | arbeitnow | payload.",
+                  "disabled": false
+                },
+                {
+                  "key": "skills",
+                  "value": "react,typescript",
+                  "description": "Comma list, up to 10 skills.",
+                  "disabled": false
+                },
+                {
+                  "key": "min_score",
+                  "value": "60",
+                  "description": "Minimum match score 0-100.",
+                  "disabled": false
+                },
+                {
+                  "key": "bookmarked",
+                  "value": "true",
+                  "description": "Only bookmarked jobs.",
+                  "disabled": false
+                },
+                {
+                  "key": "include_hidden",
+                  "value": "false",
+                  "description": "Include hidden jobs.",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "match_score",
+                  "description": "match_score | discovered_at | deadline | title | company | salary.",
+                  "disabled": false
+                },
+                {
+                  "key": "order",
+                  "value": "desc",
+                  "description": "asc | desc.",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number, starting at 1.",
+                  "disabled": false
+                },
+                {
+                  "key": "page_size",
+                  "value": "20",
+                  "description": "Items per page.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Every supported query parameter enabled at once, to show the filter contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List jobs - invalid query (422)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs?min_score=150&sort=random",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "min_score",
+                  "value": "150",
+                  "description": "Out of range."
+                },
+                {
+                  "key": "sort",
+                  "value": "random",
+                  "description": "Not a sort key."
+                }
+              ]
+            },
+            "description": "Out-of-range min_score and an unknown sort key return 422 VALIDATION_ERROR."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "description": "JobDetail with description, match_explanation and application."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('detail includes match_explanation with 8 factors', () => {",
+                  "  pm.expect(body.match_explanation.factors).to.have.lengthOf(8);",
+                  "  pm.expect(body.match_explanation.score).to.eql(body.match_score);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job - not found (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "999999999"
+              ]
+            },
+            "description": "Unknown job id returns 404 NOT_FOUND."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job - invalid id (422)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "0"
+              ]
+            },
+            "description": "Path ids must be >= 1."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compute match",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/match",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "match"
+              ]
+            },
+            "description": "MatchExplanation (design.md §5.5): score, factors, matched/missing skills, +/- reasons."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('match_explanation shape', () => {",
+                  "  pm.expect(body).to.include.keys('job_id', 'score', 'algorithm_version', 'factors',",
+                  "    'matched_required_skills', 'missing_required_skills', 'matched_preferred_skills',",
+                  "    'missing_preferred_skills', 'positive_reasons', 'negative_reasons');",
+                  "  pm.expect(body.factors.map((f) => f.key)).to.eql(['required_skills', 'preferred_skills',",
+                  "    'role_similarity', 'experience', 'location', 'work_mode', 'education', 'projects']);",
+                  "  pm.expect(body.factors.map((f) => f.weight)).to.eql([35, 10, 15, 15, 10, 5, 5, 5]);",
+                  "  pm.expect(body.score).to.be.within(0, 100);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bookmark job",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/bookmark",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "bookmark"
+              ]
+            },
+            "description": "Idempotent set; returns JobState. Does not create an application."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('is bookmarked', () => pm.expect(pm.response.json().is_bookmarked).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove bookmark",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/bookmark",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "bookmark"
+              ]
+            },
+            "description": "Idempotent unset; returns JobState."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('not bookmarked', () => pm.expect(pm.response.json().is_bookmarked).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hide job",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/hide",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "hide"
+              ]
+            },
+            "description": "Removes the job from lists and recommendations for this user; returns JobState."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('is hidden', () => pm.expect(pm.response.json().is_hidden).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unhide job",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/hide",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "hide"
+              ]
+            },
+            "description": "Restores the job; returns JobState."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('not hidden', () => pm.expect(pm.response.json().is_hidden).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bookmark job - not found (404)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/999999999/bookmark",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "999999999",
+                "bookmark"
+              ]
+            },
+            "description": "Unknown job id returns 404 NOT_FOUND."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ingestion",
+      "description": "POST /api/jobs/ingest (design.md §11). Sources: fixture | remotive | arbeitnow | payload.",
+      "item": [
+        {
+          "name": "Ingest - fixtures",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "ingest"
+              ]
+            },
+            "description": "Imports data/seed_jobs.json and data/ingest/*.json (including files captured by the MCP ingestion-agent). Offline and idempotent. limit caps the total across files, seed_jobs.json first, so it is set to the maximum (500). Returns 502 INGESTION_SOURCE_UNAVAILABLE if any data/ingest/ file is invalid or larger than 5,000,000 bytes (fix or delete that file).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"fixture\",\n  \"limit\": 500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('IngestResult shape', () => {",
+                  "  pm.expect(body).to.include.keys('requested_source', 'source', 'fallback_used', 'fetched',",
+                  "    'created', 'updated', 'duplicates', 'rejected', 'errors');",
+                  "  pm.expect(body.source).to.eql('fixture');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest - Remotive with fallback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "ingest"
+              ]
+            },
+            "description": "Fetches the allow-listed Remotive API; on any upstream failure falls back to fixtures and reports fallback_used=true. Requires network for the live path.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"remotive\",\n  \"fallback\": true,\n  \"limit\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('source is remotive or fixture fallback', () => {",
+                  "  pm.expect(body.requested_source).to.eql('remotive');",
+                  "  pm.expect(body.source).to.be.oneOf(['remotive', 'fixture']);",
+                  "  pm.expect(body.fallback_used).to.eql(body.source === 'fixture');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest - Arbeitnow without fallback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "ingest"
+              ]
+            },
+            "description": "fallback=false: 200 when the API is reachable, else 502 INGESTION_SOURCE_UNAVAILABLE.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"arbeitnow\",\n  \"fallback\": false,\n  \"limit\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 or 502', () => pm.expect(pm.response.code).to.be.oneOf([200, 502]));",
+                  "if (pm.response.code === 502) {",
+                  "  pm.test('upstream error code', () => pm.expect(pm.response.json().error.code)",
+                  "    .to.eql('INGESTION_SOURCE_UNAVAILABLE'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest - MCP payload (Remotive format)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "ingest"
+              ]
+            },
+            "description": "A Remotive-shaped response captured with the MCP fetch tool, posted as source=payload. Adds one example job (re-running updates it by external_id).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"payload\",\n  \"format\": \"remotive\",\n  \"payload\": {\n    \"jobs\": [\n      {\n        \"id\": 900001,\n        \"url\": \"https://remotive.com/remote-jobs/software-dev/example-frontend-intern-900001\",\n        \"title\": \"Frontend Engineering Intern\",\n        \"company_name\": \"Example Labs\",\n        \"job_type\": \"internship\",\n        \"candidate_required_location\": \"Worldwide\",\n        \"salary\": \"\",\n        \"tags\": [\n          \"react\",\n          \"typescript\",\n          \"css\"\n        ],\n        \"description\": \"<p>Build accessible UI components with <b>React</b> and TypeScript.</p>\"\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('payload processed', () => {",
+                  "  pm.expect(body.source).to.eql('payload');",
+                  "  pm.expect(body.fetched).to.eql(1);",
+                  "  pm.expect(body.created + body.updated + body.duplicates + body.rejected).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest - payload without format (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "ingest"
+              ]
+            },
+            "description": "format is required when source=payload.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"payload\",\n  \"payload\": {\n    \"jobs\": []\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Recommendations",
+      "description": "GET /api/recommendations (design.md §7).",
+      "item": [
+        {
+          "name": "Top recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recommendations?limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recommendations"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "description": "1-20, default 5."
+                }
+              ]
+            },
+            "description": "list[Recommendation] ordered by score desc, deadline asc, id asc."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('at most 5 with explanations', () => {",
+                  "  pm.expect(body).to.be.an('array');",
+                  "  pm.expect(body.length).to.be.at.most(5);",
+                  "  body.forEach((r) => pm.expect(r).to.have.keys('job', 'match_explanation'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recommendations - limit out of range (422)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recommendations?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recommendations"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Out of range."
+                }
+              ]
+            },
+            "description": "limit must be 1-20."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Applications",
+      "description": "Application tracker (design.md §6, §8). Run in order: create -> move -> invalid move -> duplicate -> apply -> delete -> apply again -> cleanup.",
+      "item": [
+        {
+          "name": "List applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Applied",
+                  "description": "Repeatable; exact casing.",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "Interview",
+                  "description": "Repeatable; exact casing.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Plain list (Kanban needs the full set; capped at 500). Optional repeatable status filter."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('is a list with job summaries', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.be.an('array');",
+                  "  body.forEach((a) => pm.expect(a.job).to.include.keys('id', 'title', 'company'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Application meta",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "meta"
+              ]
+            },
+            "description": "Statuses in canonical order and the allowed-transition map the Kanban uses."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('8 statuses in canonical order', () => {",
+                  "  pm.expect(pm.response.json().statuses).to.eql(['Saved', 'Interested', 'Applied',",
+                  "    'Assessment', 'Interview', 'Rejected', 'Offer', 'Withdrawn']);",
+                  "});",
+                  "pm.test('Offer can only move to Withdrawn', () => {",
+                  "  pm.expect(pm.response.json().transitions.Offer).to.eql(['Withdrawn']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications"
+              ]
+            },
+            "description": "201 Application. {{jobId}} is a job without an application (set by 'List jobs').",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": {{jobId}},\n  \"status\": \"Saved\",\n  \"notes\": \"Found via InternPilot recommendations.\",\n  \"recruiter_name\": \"Alex Recruiter\",\n  \"recruiter_email\": \"recruiter@example.com\",\n  \"deadline\": \"2026-10-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('created as Saved', () => pm.expect(body.status).to.eql('Saved'));",
+                  "pm.collectionVariables.set('applicationId', String(body.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create application - duplicate (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications"
+              ]
+            },
+            "description": "A second application for the same job returns 409 DUPLICATE_APPLICATION.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": {{jobId}},\n  \"status\": \"Saved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('error code is DUPLICATE_APPLICATION', () => pm.expect(pm.response.json().error.code).to.eql('DUPLICATE_APPLICATION'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create application - unknown job (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications"
+              ]
+            },
+            "description": "job_id that does not exist returns 404 NOT_FOUND.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": 999999999,\n  \"status\": \"Saved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create application - invalid status (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications"
+              ]
+            },
+            "description": "Status must be one of the 8 values with exact casing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": {{jobId}},\n  \"status\": \"applied\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update application - move to Interested",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Partial update; status changes go through application_status.transition().",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Interested\",\n  \"notes\": \"Shortlisted for this week.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status is Interested', () => pm.expect(pm.response.json().status).to.eql('Interested'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update application - invalid transition (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Interested -> Offer is not allowed: 409 INVALID_STATUS_TRANSITION with details.allowed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Offer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('error code is INVALID_STATUS_TRANSITION', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_STATUS_TRANSITION'));",
+                  "pm.test('details list allowed targets', () => {",
+                  "  const details = pm.response.json().error.details;",
+                  "  pm.expect(details.from).to.eql('Interested');",
+                  "  pm.expect(details.to).to.eql('Offer');",
+                  "  pm.expect(details.allowed).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark job applied (existing Interested -> 200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "apply"
+              ]
+            },
+            "description": "Existing Saved/Interested application moves to Applied: 200 and applied_at is set."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is Applied with applied_at', () => {",
+                  "  pm.expect(body.status).to.eql('Applied');",
+                  "  pm.expect(body.applied_at).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete application",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "204 No Content."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete application - not found (404)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Deleting again returns 404 NOT_FOUND (also returned for another user's application)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark job applied (no application -> 201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "apply"
+              ]
+            },
+            "description": "No application exists: creates one with status Applied and returns 201."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('created as Applied', () => pm.expect(body.status).to.eql('Applied'));",
+                  "pm.collectionVariables.set('applicationId', String(body.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete application (cleanup)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Removes the application created above so the collection leaves demo data as it found it (activity events remain)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "description": "GET /api/dashboard (design.md §7). Metrics are computed fresh per request.",
+      "item": [
+        {
+          "name": "Get dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ]
+            },
+            "description": "All dashboard metrics, charts data, deadlines, activity and top recommendations."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('dashboard shape', () => {",
+                  "  pm.expect(body).to.include.keys('total_jobs_discovered', 'matching_jobs',",
+                  "    'applications_submitted', 'interviews_scheduled', 'offers_received', 'response_rate',",
+                  "    'upcoming_deadlines', 'recent_activity', 'top_recommendations', 'status_breakdown',",
+                  "    'applications_over_time', 'score_distribution');",
+                  "  pm.expect(body.status_breakdown).to.have.lengthOf(8);",
+                  "  pm.expect(body.applications_over_time).to.have.lengthOf(8);",
+                  "  pm.expect(body.score_distribution).to.have.lengthOf(5);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Resume",
+      "description": "POST /api/resume/analyze (design.md §9). Never rewrites the resume.",
+      "item": [
+        {
+          "name": "Analyze resume against job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resume/analyze",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "resume",
+                "analyze"
+              ]
+            },
+            "description": "Omit resume_text (or send blank) to analyze the stored profile resume instead.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": {{jobId}},\n  \"resume_text\": \"Computer science student. Built a React and TypeScript dashboard used by 300 students, cut page load time by 40%, and wrote REST APIs in Python with PostgreSQL. Comfortable with Git and Docker.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('analysis shape', () => {",
+                  "  pm.expect(body.resume_source).to.eql('request');",
+                  "  pm.expect(body.compatibility_score).to.be.within(0, 100);",
+                  "  pm.expect(body.compatibility_score).to.eql(body.match_explanation.score);",
+                  "  pm.expect(body).to.include.keys('matching_skills', 'missing_skills', 'relevant_projects',",
+                  "    'missing_keywords', 'suggestions', 'word_count');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Analyze resume - unknown job (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resume/analyze",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "resume",
+                "analyze"
+              ]
+            },
+            "description": "Unknown job_id returns 404 NOT_FOUND.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": 999999999,\n  \"resume_text\": \"React developer.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Analyze resume - invalid body (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resume/analyze",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "resume",
+                "analyze"
+              ]
+            },
+            "description": "job_id must be >= 1. (RESUME_EMPTY, also 422, is returned when both the request and profile resume are blank.)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Interview prep",
+      "description": "GET /api/interview/{job_id} (design.md §10). Template provider by default.",
+      "item": [
+        {
+          "name": "Interview prep for job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/interview/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "interview",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Sections (role, technical, skill, project, hr) and prioritized prep topics."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('prep shape', () => {",
+                  "  pm.expect(body.provider).to.be.oneOf(['template', 'llm']);",
+                  "  pm.expect(body.sections).to.be.an('array').that.is.not.empty;",
+                  "  pm.expect(body.prep_topics).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Interview prep - not found (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/interview/999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "interview",
+                "999999999"
+              ]
+            },
+            "description": "Unknown job id returns 404 NOT_FOUND."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Errors",
+      "description": "Framework-level errors still use the envelope.",
+      "item": [
+        {
+          "name": "Unknown route (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User",
+                "value": "{{demoUser}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/does-not-exist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "does-not-exist"
+              ]
+            },
+            "description": "Unknown paths return 404 NOT_FOUND in the standard envelope."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Runs after every request (design.md §8.2, §14).",
+          "pm.test('X-Request-ID header is returned', () => pm.response.to.have.header('X-Request-ID'));",
+          "const isHealth = pm.request.url.getPath() === '/api/health';",
+          "if (pm.response.code >= 400 && !isHealth) {",
+          "  pm.test('error envelope shape', () => {",
+          "    const body = pm.response.json();",
+          "    pm.expect(body).to.have.keys('error');",
+          "    pm.expect(body.error).to.include.keys('code', 'message', 'details');",
+          "    pm.expect(body.error.code).to.match(/^[A-Z][A-Z_]*$/);",
+          "    pm.expect(body.error.message).to.be.a('string').and.not.empty;",
+          "  });",
+          "}",
+          "if (pm.response.code === 500) {",
+          "  pm.test('500 message is generic', () => pm.expect(pm.response.json().error.message)",
+          "    .to.eql('An unexpected error occurred.'));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "demoUser",
+      "value": "demo@internpilot.dev",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "applicationId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "profileBody",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "career-data-toolkit",
+  "version": "1.0.0",
+  "description": "Engineering knowledge for InternPilot AI career data: normalizing job and profile skills, computing and explaining the deterministic 0-100 match score, and comparing a resume against a specific job. Knowledge only; all application logic lives in the project code.",
+  "author": {
+    "name": "InternPilot AI maintainers"
+  },
+  "license": "MIT",
+  "keywords": [
+    "skill normalization",
+    "job normalization",
+    "match score",
+    "match explanation",
+    "resume analysis",
+    "internship",
+    "career data"
+  ],
+  "extensions": {
+    "dev.kiro": {
+      "displayName": "Career Data Toolkit",
+      "activationKeywords": [
+        "skill normalization",
+        "job normalization",
+        "match score",
+        "match explanation",
+        "resume analysis",
+        "internship",
+        "career data"
+      ],
+      "skills": [
+        "./skills/job-normalization/SKILL.md",
+        "./skills/resume-analysis/SKILL.md",
+        "./skills/match-explanation/SKILL.md"
+      ],
+      "references": [
+        "./references/scoring-rules.md"
+      ]
+    }
+  }
+}

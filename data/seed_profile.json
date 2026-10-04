@@ -1,0 +1,89 @@
+{
+  "location": "Bengaluru, India",
+  "target_roles": [
+    "Software Engineering Intern",
+    "Backend Developer",
+    "Full Stack Developer",
+    "Data Analyst Intern"
+  ],
+  "preferred_locations": ["Bengaluru, India", "Hyderabad, India", "Remote"],
+  "preferred_work_modes": ["remote", "hybrid"],
+  "experience_level": "internship",
+  "education_level": "bachelor",
+  "education": [
+    {
+      "institution": "Example Institute of Technology",
+      "degree": "B.E.",
+      "field": "Computer Science and Engineering",
+      "start_year": 2022,
+      "end_year": 2026
+    },
+    {
+      "institution": "Example Pre-University College",
+      "degree": "Pre-University Certificate",
+      "field": "Physics, Chemistry, Mathematics, Computer Science",
+      "start_year": 2020,
+      "end_year": 2022
+    }
+  ],
+  "technical_skills": [
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node.js",
+    "FastAPI",
+    "SQL",
+    "PostgreSQL",
+    "Git",
+    "Docker",
+    "HTML",
+    "CSS",
+    "Tailwind CSS",
+    "REST APIs",
+    "pandas",
+    "NumPy",
+    "scikit-learn",
+    "Machine Learning",
+    "pytest",
+    "Jest",
+    "Linux",
+    "GitHub Actions",
+    "Data Analysis"
+  ],
+  "soft_skills": ["Communication", "Teamwork", "Problem Solving", "Time Management"],
+  "projects": [
+    {
+      "name": "Campus Event Planner",
+      "description": "Full-stack web app for student clubs to publish events and track RSVPs; used by 300+ students in its first semester.",
+      "technologies": ["React", "TypeScript", "Node.js", "PostgreSQL", "Docker"],
+      "url": "https://github.com/internpilot-demo/campus-event-planner"
+    },
+    {
+      "name": "Expense Insights API",
+      "description": "REST API that categorises bank-statement CSVs and returns monthly spending summaries, with 90% test coverage and CI on every push.",
+      "technologies": ["Python", "FastAPI", "PostgreSQL", "pytest", "GitHub Actions"],
+      "url": "https://github.com/internpilot-demo/expense-insights-api"
+    },
+    {
+      "name": "Placement Predictor",
+      "description": "Classification model predicting campus placement outcomes from academic records; compared logistic regression and random forests and reached 86% accuracy.",
+      "technologies": ["Python", "pandas", "scikit-learn", "Machine Learning"],
+      "url": null
+    },
+    {
+      "name": "Portfolio Site",
+      "description": "Responsive personal portfolio with a blog and project gallery, deployed as a static site.",
+      "technologies": ["HTML", "CSS", "Tailwind CSS", "JavaScript"],
+      "url": "https://portfolio.example.com"
+    }
+  ],
+  "certifications": [
+    { "name": "AWS Certified Cloud Practitioner", "issuer": "Amazon Web Services", "year": 2024 },
+    { "name": "Python for Data Science", "issuer": "Example Online Academy", "year": 2023 }
+  ],
+  "resume_text": "Demo Student\nBengaluru, India | demo@internpilot.dev | github.com/internpilot-demo\n\nSUMMARY\nThird-year Computer Science student looking for a software engineering or backend internship. Comfortable across the stack with Python, FastAPI, React and PostgreSQL.\n\nEDUCATION\nB.E. Computer Science and Engineering, Example Institute of Technology (2022-2026), CGPA 8.7/10\n\nSKILLS\nLanguages: Python, JavaScript, TypeScript, SQL, HTML, CSS\nFrameworks: React, Node.js, FastAPI, Tailwind CSS\nData: pandas, NumPy, scikit-learn, PostgreSQL\nTools: Git, Docker, Linux, GitHub Actions, pytest, Jest\n\nPROJECTS\nCampus Event Planner - Built a React and Node.js app backed by PostgreSQL for 12 student clubs; reduced event sign-up time by 40%.\nExpense Insights API - Designed a FastAPI REST API with pytest suites and GitHub Actions CI; processes 10,000 transactions in under 2 seconds.\nPlacement Predictor - Trained scikit-learn models on 2,000 student records; 86% accuracy.\n\nEXPERIENCE\nTeaching Assistant, Data Structures Lab (2024) - Helped 60 students debug Python assignments each week.\n\nCERTIFICATIONS\nAWS Certified Cloud Practitioner (2024)",
+  "github_url": "https://github.com/internpilot-demo",
+  "portfolio_url": "https://portfolio.example.com",
+  "linkedin_url": "https://www.linkedin.com/in/internpilot-demo"
+}

@@ -1,0 +1,67 @@
+# InternPilot AI local stack (design.md §18). Usage: cp .env.example .env, edit, docker compose up
+# Values come from .env (gitignored); no secrets are written here. Ports bind to 127.0.0.1 only.
+name: internpilot
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    # Loopback only: for host-run backends and TEST_DATABASE_URL. Containers use `db:5432`.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Overrides the host-only localhost DATABASE_URL in .env: inside the network the DB is `db`.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
+      DATA_DIR: /data
+      APP_ENV: ${APP_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-demo@internpilot.dev}
+      DEMO_USER_NAME: ${DEMO_USER_NAME:-Demo Student}
+      INGEST_ALLOWED_HOSTS: ${INGEST_ALLOWED_HOSTS:-remotive.com,www.arbeitnow.com}
+      INGEST_TIMEOUT_SECONDS: ${INGEST_TIMEOUT_SECONDS:-10}
+      INGEST_MAX_BYTES: ${INGEST_MAX_BYTES:-5000000}
+      LLM_ENABLED: ${LLM_ENABLED:-false}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai_compatible}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    volumes:
+      - ./data:/data:ro
+    # Loopback only: the demo identity (X-Demo-User) is not authentication (security.md).
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Public URL the browser calls, baked in at build time (never a secret). Rebuild to change.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Loopback only. The browser origin is http://localhost:${FRONTEND_PORT}; if FRONTEND_PORT
+    # changes, CORS_ORIGINS must list the new origin or the backend rejects the SPA's requests.
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:8080"
+
+volumes:
+  pgdata:

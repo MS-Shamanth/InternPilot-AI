@@ -1,0 +1,142 @@
+"""Canonical skill catalog, aliases and ambiguous resume terms (design.md §5.1, §9.1).
+
+All keys and values are already normalized (NFKC, casefolded, trimmed). Every alias target is a
+`CATALOG` key, and every `CATALOG` key is a fixed point of `normalize_skill`; unit tests enforce
+both so normalization stays idempotent.
+"""
+
+from collections.abc import Mapping
+from types import MappingProxyType
+
+ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "reactjs": "react",
+        "react.js": "react",
+        "js": "javascript",
+        "ecmascript": "javascript",
+        "ts": "typescript",
+        "py": "python",
+        "python3": "python",
+        "postgres": "postgresql",
+        "psql": "postgresql",
+        "node": "node.js",
+        "nodejs": "node.js",
+        "ml": "machine learning",
+        "dl": "deep learning",
+        "k8s": "kubernetes",
+        "amazon web services": "aws",
+        "google cloud": "gcp",
+        "google cloud platform": "gcp",
+        "sklearn": "scikit-learn",
+        "scikit learn": "scikit-learn",
+        "natural language processing": "nlp",
+        "golang": "go",
+        "c sharp": "c#",
+        "cpp": "c++",
+        "vuejs": "vue",
+        "vue.js": "vue",
+        "nextjs": "next.js",
+        "tailwind": "tailwind css",
+        "tailwindcss": "tailwind css",
+        "rest": "rest apis",
+        "rest api": "rest apis",
+        "restful": "rest apis",
+        "restful apis": "rest apis",
+        "html5": "html",
+        "css3": "css",
+        "mongo": "mongodb",
+        "gh actions": "github actions",
+        "github action": "github actions",
+        # Listed in design.md §5.1; it maps to itself, which keeps lookups explicit and harmless.
+        "ci/cd": "ci/cd",
+        "cicd": "ci/cd",
+    }
+)
+
+CATALOG: Mapping[str, str] = MappingProxyType(
+    {
+        ".net": ".NET",
+        "agile": "Agile",
+        "angular": "Angular",
+        "aws": "AWS",
+        "azure": "Azure",
+        "c": "C",
+        "c#": "C#",
+        "c++": "C++",
+        "ci/cd": "CI/CD",
+        "computer vision": "Computer Vision",
+        "css": "CSS",
+        "data analysis": "Data Analysis",
+        "data visualization": "Data Visualization",
+        "deep learning": "Deep Learning",
+        "django": "Django",
+        "docker": "Docker",
+        "excel": "Excel",
+        "express": "Express",
+        "fastapi": "FastAPI",
+        "figma": "Figma",
+        "flask": "Flask",
+        "gcp": "GCP",
+        "git": "Git",
+        "github actions": "GitHub Actions",
+        "go": "Go",
+        "graphql": "GraphQL",
+        "html": "HTML",
+        "java": "Java",
+        "javascript": "JavaScript",
+        "jest": "Jest",
+        "kotlin": "Kotlin",
+        "kubernetes": "Kubernetes",
+        "linux": "Linux",
+        "machine learning": "Machine Learning",
+        "mongodb": "MongoDB",
+        "mysql": "MySQL",
+        "next.js": "Next.js",
+        "nlp": "NLP",
+        "node.js": "Node.js",
+        "numpy": "NumPy",
+        "pandas": "pandas",
+        "postgresql": "PostgreSQL",
+        "power bi": "Power BI",
+        "pytest": "pytest",
+        "python": "Python",
+        "pytorch": "PyTorch",
+        "r": "R",
+        "react": "React",
+        "redis": "Redis",
+        "rest apis": "REST APIs",
+        "rust": "Rust",
+        "scikit-learn": "scikit-learn",
+        "spark": "Spark",
+        "spring boot": "Spring Boot",
+        "sql": "SQL",
+        "sqlite": "SQLite",
+        "statistics": "Statistics",
+        "swift": "Swift",
+        "tableau": "Tableau",
+        "tailwind css": "Tailwind CSS",
+        "tensorflow": "TensorFlow",
+        "terraform": "Terraform",
+        "typescript": "TypeScript",
+        "unit testing": "Unit Testing",
+        "vue": "Vue",
+    }
+)
+
+# Terms that are also common English words or abbreviations. Resume extraction (§9.1) matches
+# them case-sensitively, only in these exact casings; every other term is matched casefolded.
+AMBIGUOUS_RESUME_TERMS: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "go": frozenset({"Go", "Golang"}),
+        "golang": frozenset({"Golang"}),
+        "rest": frozenset({"REST"}),
+        "node": frozenset({"Node"}),
+        "js": frozenset({"JS"}),
+        "ts": frozenset({"TS"}),
+        "py": frozenset({"PY"}),
+        "ml": frozenset({"ML"}),
+        "dl": frozenset({"DL"}),
+        "r": frozenset({"R"}),
+        "c": frozenset({"C"}),
+    }
+)

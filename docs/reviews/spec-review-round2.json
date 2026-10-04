@@ -1,0 +1,19 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {"id": "F1", "severity": "MEDIUM", "file": "requirements.md R2.4 / design.md §8.1", "problem": "Job-list skills/location/source filter semantics undefined (which skill set, normalization, None entries, case sensitivity).", "fix": "skills: <=10 entries, normalize_skill each, None -> 422, job matches if any entry in required ∪ preferred; location: 1-100 chars, casefold substring via escaped ilike; source: single enum value."},
+    {"id": "F2", "severity": "MEDIUM", "file": "requirements.md R5.5 / design.md §6", "problem": "PATCH with a disallowed transition: unspecified whether other fields in the same request are persisted.", "fix": "Reject the whole PATCH; persist no fields; run transition() before applying field changes."},
+    {"id": "F3", "severity": "NIT", "file": "requirements.md R12.2", "problem": "Status list omits 401 UNKNOWN_DEMO_USER.", "fix": "Add 401 to the list."},
+    {"id": "F4", "severity": "MEDIUM", "file": "design.md §11.5", "problem": "Says raise UpstreamUnavailableError, whose code in errors.py is UPSTREAM_UNAVAILABLE; R10.7 requires INGESTION_SOURCE_UNAVAILABLE.", "fix": "Raise IngestionSourceUnavailableError; add API test asserting the code."},
+    {"id": "F5", "severity": "MEDIUM", "file": "design.md §3.2/§14/§18, tasks 2.3", "problem": "No CORSMiddleware designed or installed although frontend (5173) calls backend (8000) cross-origin; VITE_API_BASE_URL default unstated.", "fix": "Add CORSMiddleware(allow_origins=settings.cors_origins, allow_credentials=False, methods GET/POST/PUT/PATCH/DELETE, headers Content-Type/X-Demo-User/X-Request-ID, expose X-Request-ID); VITE_API_BASE_URL default http://localhost:8000/api; preflight API tests; add task."},
+    {"id": "F6", "severity": "MEDIUM", "file": "design.md §4.1", "problem": "Activity event types listed without exact triggers (unset/no-op bookmark, status+field PATCH, jobs_ingested user for CLI).", "fix": "Add trigger table: bookmark/hide only false->true; status_changed on real change; application_updated only for non-status-only PATCH; jobs_ingested one per run attributed to request user or seed_key='demo' user for CLI, none if absent."},
+    {"id": "F7", "severity": "NIT", "file": "design.md §5.1", "problem": "ALIASES includes ci/cd -> ci/cd, contradicting 'alias value is not an alias key'.", "fix": "Drop the identity key."},
+    {"id": "F8", "severity": "NIT", "file": "design.md §5.1", "problem": "NFKC then casefold is not guaranteed idempotent for all Unicode.", "fix": "Use NFKC(casefold(NFKC(raw)))."},
+    {"id": "F9", "severity": "NIT", "file": "design.md §9.1", "problem": "Ambiguous term R matches 'R&D' and initials.", "fix": "For r/c reject following '&' or '. '; add unit tests."},
+    {"id": "F10", "severity": "NIT", "file": "steering/coding-standards.md", "problem": "Error-code list lacks NOT_READY, UPSTREAM_UNAVAILABLE, METHOD_NOT_ALLOWED, BAD_REQUEST, UNSUPPORTED_MEDIA_TYPE, HTTP_ERROR used by §14/errors.py.", "fix": "Add them as framework/base codes."},
+    {"id": "F11", "severity": "NIT", "file": "design.md §3.3", "problem": "ilike escaping of %/_ (security steering) not stated in design.", "fix": "State escape rule for q and location; add test q='100%'."},
+    {"id": "F12", "severity": "NIT", "file": "design.md §11.4", "problem": "'Update mutable fields' not enumerated.", "fix": "List mutable vs immutable (source, external_id, discovered_at) fields."}
+  ],
+  "reviewDoc": "c:\\Users\\MS Shamanth\\Desktop\\Kiro Uni/.agents/tasks/spec-review.md",
+  "note": "Permission rules deny reading/writing .agents/; this copy is at docs/reviews/spec-review-round2.{md,json}."
+}

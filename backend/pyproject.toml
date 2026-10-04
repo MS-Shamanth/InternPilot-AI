@@ -1,0 +1,53 @@
+[project]
+name = "internpilot-backend"
+version = "0.1.0"
+description = "InternPilot AI backend (FastAPI)"
+requires-python = ">=3.12,<3.13"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+extend-exclude = [".venv", "alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ANN", "S", "SIM", "RUF"]
+# ANN101/ANN102 (annotate self/cls) are deprecated upstream and removed in newer ruff.
+ignore = ["ANN101", "ANN102"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+# The local `alembic/` migrations folder would otherwise make ruff classify the package as first-party.
+known-third-party = ["alembic"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+extend-exclude = '''/(\.venv)/'''
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers --import-mode=importlib"
+markers = [
+    "unit: pure unit tests (no DB, no network)",
+    "integration: tests that use a real SQLAlchemy session",
+    "api: FastAPI TestClient tests",
+    "property: Hypothesis property-based tests",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

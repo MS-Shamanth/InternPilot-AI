@@ -1,0 +1,96 @@
+[
+  {
+    "job_external_id": "seed-001",
+    "status": "Interview",
+    "applied_days_ago": 12,
+    "interview_in_days": 3,
+    "recruiter_name": "Jordan Lee",
+    "recruiter_email": "recruiter@example.com",
+    "notes": "Technical round with the platform team. Revise SQL joins and REST API design."
+  },
+  {
+    "job_external_id": "seed-003",
+    "status": "Applied",
+    "applied_days_ago": 5,
+    "recruiter_email": "hiring@example.com",
+    "notes": "Applied through the careers page with the Expense Insights API project highlighted."
+  },
+  {
+    "job_external_id": "seed-004",
+    "status": "Assessment",
+    "applied_days_ago": 9,
+    "deadline_in_days": 2,
+    "recruiter_name": "Sam Patel",
+    "recruiter_email": "talent@example.com",
+    "notes": "Take-home SQL and Excel case study; submit before the deadline."
+  },
+  {
+    "job_external_id": "seed-002",
+    "status": "Saved",
+    "notes": "Strong React match. Add Tailwind CSS work to the portfolio before applying."
+  },
+  {
+    "job_external_id": "seed-006",
+    "status": "Interested",
+    "notes": "Ask a senior on campus about the team before applying."
+  },
+  {
+    "job_external_id": "seed-007",
+    "status": "Applied",
+    "applied_days_ago": 20,
+    "recruiter_email": "careers@example.com",
+    "notes": "No response yet; follow up next week."
+  },
+  {
+    "job_external_id": "seed-008",
+    "status": "Rejected",
+    "applied_days_ago": 40,
+    "recruiter_name": "Morgan Hughes",
+    "recruiter_email": "recruiter@example.org",
+    "notes": "Online assessment focused on Java collections.",
+    "outcome": "Rejected after the online assessment; feedback: practise Java data structures."
+  },
+  {
+    "job_external_id": "seed-013",
+    "status": "Offer",
+    "applied_days_ago": 30,
+    "interview_in_days": -10,
+    "recruiter_name": "Taylor Kim",
+    "recruiter_email": "people@example.com",
+    "notes": "Offer letter received; reply needed within a week.",
+    "outcome": "Offer: six-month remote internship."
+  },
+  {
+    "job_external_id": "seed-018",
+    "status": "Interview",
+    "applied_days_ago": 15,
+    "interview_in_days": 6,
+    "recruiter_name": "Riley Chen",
+    "recruiter_email": "research-hiring@example.com",
+    "notes": "Research interview: present the Placement Predictor project and discuss NLP basics."
+  },
+  {
+    "job_external_id": "seed-023",
+    "status": "Withdrawn",
+    "applied_days_ago": 25,
+    "notes": "Full-time start date clashed with final-year exams.",
+    "outcome": "Withdrew to focus on internship roles."
+  },
+  {
+    "job_external_id": "seed-028",
+    "status": "Saved",
+    "notes": "Brush up on MongoDB before applying."
+  },
+  {
+    "job_external_id": "seed-030",
+    "status": "Interested",
+    "notes": "Contract role; check whether it can be done part-time during the semester."
+  },
+  {
+    "job_external_id": "seed-009",
+    "status": "Applied",
+    "applied_days_ago": 2,
+    "recruiter_email": "jobs@example.org",
+    "notes": "Requires a master's degree; applied anyway to ask about exceptions."
+  }
+]

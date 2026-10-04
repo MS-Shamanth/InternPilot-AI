@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Backend unit tests on save",
+      "trigger": "PostFileSave",
+      "description": "On save of backend app code, run the fast unit suite. Read-only: no file fixes, no pytest cache; exit code reports pass/fail only.",
+      "matcher": "(^|[\\\\/])backend[\\\\/]app[\\\\/].+\\.py$",
+      "action": {
+        "type": "command",
+        "command": "cmd /c \"cd backend && .venv\\Scripts\\pytest.exe tests\\unit -q -x -p no:cacheprovider\"",
+        "timeout": 120
+      }
+    }
+  ]
+}

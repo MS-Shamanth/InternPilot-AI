@@ -1,0 +1,35 @@
+{
+  "format": "remotive",
+  "jobs": [
+    {
+      "id": 910001,
+      "url": "https://jobs.example.com/remotive-sample/910001",
+      "title": "Junior Python Developer",
+      "company_name": "Lanternfish Software",
+      "job_type": "full_time",
+      "candidate_required_location": "Worldwide",
+      "tags": ["python", "django", "postgres"],
+      "description": "<p>Help us build <strong>Django</strong> services for small businesses.</p><ul><li>Write REST APIs</li><li>Use Docker and Git daily</li></ul>"
+    },
+    {
+      "id": 910002,
+      "url": "https://jobs.example.com/remotive-sample/910002",
+      "title": "Frontend Engineering Intern",
+      "company_name": "Paperkite Studio",
+      "job_type": "internship",
+      "candidate_required_location": "Europe",
+      "tags": ["react", "typescript", "css"],
+      "description": "<p>Pair with senior engineers on our design-system components.</p><p>Nice to have: Jest and Figma.</p>"
+    },
+    {
+      "id": 910003,
+      "url": "https://jobs.example.com/remotive-sample/910003",
+      "title": "Data Analyst",
+      "company_name": "Nimbus Metrics",
+      "job_type": "freelance",
+      "candidate_required_location": "India",
+      "tags": ["sql", "tableau", "excel"],
+      "description": "<p>Contract analyst for product dashboards. Python and statistics are a plus.</p>"
+    }
+  ]
+}

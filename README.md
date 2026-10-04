@@ -27,26 +27,67 @@ The project is built spec-first with Kiro. Behavior is defined in [`.kiro/specs/
 - **Quality:** Ruff, Black, ESLint, Prettier
 - **Infrastructure:** Docker, Docker Compose, nginx for the built frontend
 
+## Requirements
+
+- Docker Desktop / Docker Engine with Compose v2 (for the full stack)
+- For local development: Python 3.12, Node.js 22, PostgreSQL 16 (or the compose `db` service)
+
 ## Quickstart (docker compose)
 
-Added once the containers are built (spec task 8.1). The target flow is `docker compose up`, which runs migrations and the idempotent seed before starting the API and the frontend.
+```powershell
+docker compose --env-file .env.example up -d --build --wait
+```
+
+Open http://localhost:5173 (frontend), http://localhost:8000/docs (API). The backend entrypoint runs `alembic upgrade head`, then the idempotent seed (demo user, 32 jobs, 13 applications), then uvicorn. If port 5432 is busy, set `POSTGRES_PORT` first. Stop with `docker compose --env-file .env.example down -v`. Details and the recorded run: [docs/demo.md](docs/demo.md); walkthrough: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+
+## Environment
+
+All configuration comes from environment variables, documented with placeholders in [`.env.example`](.env.example). For anything beyond a local demo, `cp .env.example .env` and change the values; `.env` is gitignored. `DATABASE_URL` is required. The LLM provider is off by default (`LLM_ENABLED=false`). `VITE_*` values are public and baked into the frontend build.
 
 ## Local Dev
 
-Commands are added as each layer lands (spec tasks 2.x and 3.x).
+Database: run `docker compose --env-file .env.example up -d db` or point `DATABASE_URL` at your own PostgreSQL.
+
+```powershell
+# Backend (from backend/)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1          # source .venv/bin/activate on macOS/Linux
+pip install -r requirements-dev.txt
+$env:DATABASE_URL = "postgresql+psycopg://internpilot:change-me@localhost:5432/internpilot"
+alembic upgrade head                  # migrations
+python -m app.cli seed                # idempotent seed
+python -m app.cli ingest --help       # optional: import jobs (fixture fallback)
+uvicorn --factory app.asgi:build_app --reload
+
+# Frontend (from frontend/)
+npm ci
+npm run dev                           # http://localhost:5173
+```
 
 ## Testing
 
-See [`.kiro/steering/testing.md`](.kiro/steering/testing.md) for the test layout and coverage gates. The property-based tests for the matching engine will run with `pytest backend/tests/property -v`.
-
-## Kiro Challenge Evidence
-
-| Lesson | Where |
+| What | Command |
 |---|---|
-| 1 Specs | `.kiro/specs/internship-intelligence/{requirements,design,tasks}.md` |
-| 2 Steering | `.kiro/steering/{product,architecture,coding-standards,testing,security}.md` |
+| Backend, all layers (SQLite by default) | `pytest` in `backend/` |
+| Property-based tests (Hypothesis P1–P6) | `pytest tests/property -v` |
+| Backend coverage | `pytest --cov=app --cov-report=term-missing` |
+| Backend lint/format | `ruff check .`, `ruff format --check .`, `black --check .` |
+| Frontend | `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`, `npm run build` |
 
-The full evidence table is in `docs/KIRO_CHALLENGE_EVIDENCE.md` (added in the final phase).
+Set `TEST_DATABASE_URL` to run the backend suite on PostgreSQL. Layout, properties ↔ requirements and the recorded Postgres run: [docs/testing.md](docs/testing.md).
+
+## Kiro
+
+| Feature | Where | Docs |
+|---|---|---|
+| Specs | `.kiro/specs/internship-intelligence/` | requirements → design → tasks |
+| Steering | `.kiro/steering/` | product, architecture, coding standards, testing, security |
+| Hooks | `.kiro/hooks/` (format on save, related tests, task tests) | [docs/kiro-workflow.md](docs/kiro-workflow.md) |
+| MCP | `.kiro/settings/mcp.json`, `.kiro/mcp.json` (`fetch`) | [docs/kiro-mcp.md](docs/kiro-mcp.md) |
+| Powers | Postman (`docs/postman/`), custom `.kiro/powers/career-data-toolkit/` | [docs/kiro-powers.md](docs/kiro-powers.md) |
+| Custom agents | `.kiro/agents/` (architect, backend, frontend, qa, ingestion) | [docs/kiro-agents.md](docs/kiro-agents.md) |
+
+Full evidence table: [docs/KIRO_CHALLENGE_EVIDENCE.md](docs/KIRO_CHALLENGE_EVIDENCE.md). API reference: [docs/api.md](docs/api.md).
 
 ## Demo Account
 
@@ -73,7 +114,7 @@ React SPA ──REST/JSON /api──► FastAPI
 - **Offline first.** The app starts and serves every feature without network access, MCP or an LLM. Public job sources fall back to local fixtures.
 - **Configuration.** Everything is set through environment variables. See [`.env.example`](.env.example).
 
-Detailed design: [`.kiro/specs/internship-intelligence/design.md`](.kiro/specs/internship-intelligence/design.md).
+More: [docs/architecture.md](docs/architecture.md) and [`design.md`](.kiro/specs/internship-intelligence/design.md).
 
 ## License
 
