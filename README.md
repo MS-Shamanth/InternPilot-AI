@@ -1,4 +1,6 @@
 # InternPilot AI
+
+**Live demo:** https://intern-pilot-ai-jet.vercel.app
 ### AI-Powered Internship & Career Command Center
 
 InternPilot AI helps students and fresh graduates discover internships and entry-level roles, see a transparent 0–100 match score with clear reasons for every job, track applications on a table or Kanban board, prepare for interviews, and compare their resume against a specific role. Matching is deterministic and works fully offline on seeded data; an optional LLM provider can be enabled through environment variables.
@@ -20,8 +22,11 @@ The project is built spec-first with Kiro. Behavior is defined in [`.kiro/specs/
 
 ## Live Demo
 
-- **App:** _link added after deployment_
-- **API docs:** _link added after deployment_
+- **App:** https://intern-pilot-ai-jet.vercel.app
+- **API docs:** https://internpilot-ai-smcb.onrender.com/docs
+- **API health:** https://internpilot-ai-smcb.onrender.com/api/health
+
+The backend runs on Render's free tier and sleeps when idle, so the first load after a pause can take about 50 seconds.
 
 ## Tech Stack
 
