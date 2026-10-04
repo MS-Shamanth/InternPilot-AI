@@ -30,5 +30,5 @@ if ! python -m app.cli seed; then
 fi
 log "seed complete"
 
-log "starting API on 0.0.0.0:8000"
-exec uvicorn --factory app.asgi:build_app --host 0.0.0.0 --port 8000
+log "starting API on 0.0.0.0:${PORT:-8000}"
+exec uvicorn --factory app.asgi:build_app --host 0.0.0.0 --port "${PORT:-8000}"

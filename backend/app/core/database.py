@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from functools import lru_cache
 
 import sqlalchemy as sa
-from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -21,6 +21,17 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 SQLITE_MEMORY_DATABASES = frozenset({"", ":memory:"})
+# Hosted Postgres (e.g. Render) hands out driver-less URLs; this app ships psycopg 3.
+POSTGRES_DRIVERLESS_NAMES = frozenset({"postgres", "postgresql"})
+PSYCOPG_DRIVER = "postgresql+psycopg"
+
+
+def normalize_database_url(database_url: str) -> URL:
+    """Parse `database_url`, mapping `postgres://`/`postgresql://` onto the psycopg 3 driver."""
+    url = make_url(database_url)
+    if url.drivername in POSTGRES_DRIVERLESS_NAMES:
+        return url.set(drivername=PSYCOPG_DRIVER)
+    return url
 
 
 def _enable_sqlite_foreign_keys(dbapi_connection: object, _connection_record: object) -> None:
@@ -37,7 +48,7 @@ def create_db_engine(database_url: str) -> Engine:
     keys enabled, and a single shared connection for in-memory databases so every session sees
     the same data. Other databases: `pool_pre_ping` to survive dropped connections.
     """
-    url = make_url(database_url)
+    url = normalize_database_url(database_url)
     if url.get_backend_name() != "sqlite":
         engine = sa.create_engine(url, pool_pre_ping=True)
     elif (url.database or "") in SQLITE_MEMORY_DATABASES:
