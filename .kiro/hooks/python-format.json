@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Python format + lint fix",
+      "trigger": "PostFileSave",
+      "description": "On save of a backend Python file, apply ruff's safe lint fixes then ruff format. Idempotent: a second run changes nothing, so a save it triggers converges after one no-op pass.",
+      "matcher": "(^|[\\\\/])backend[\\\\/](app|tests|alembic)[\\\\/].+\\.py$",
+      "action": {
+        "type": "command",
+        "command": "cmd /c \"cd backend && .venv\\Scripts\\ruff.exe check --fix --quiet --exit-zero app tests alembic && .venv\\Scripts\\ruff.exe format --quiet app tests alembic\"",
+        "timeout": 60
+      }
+    }
+  ]
+}

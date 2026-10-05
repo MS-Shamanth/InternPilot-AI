@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "TypeScript format + lint fix",
+      "trigger": "PostFileSave",
+      "description": "On save of a frontend source file, apply eslint --fix then prettier --write over src. Idempotent; prettier runs last so formatting always wins and a second pass is a no-op.",
+      "matcher": "(^|[\\\\/])frontend[\\\\/]src[\\\\/].+\\.(ts|tsx)$",
+      "action": {
+        "type": "command",
+        "command": "cmd /c \"cd frontend && node_modules\\.bin\\eslint.cmd --fix --quiet src & node_modules\\.bin\\prettier.cmd --write --log-level warn src\"",
+        "timeout": 90
+      }
+    }
+  ]
+}
